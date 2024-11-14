@@ -1,4 +1,3 @@
-// useGroups.js
 import { useState, useCallback } from 'react';
 import { db } from '../firebase/config';
 import {
