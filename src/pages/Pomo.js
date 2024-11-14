@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import Camera from "../components/NewCamera";
 import { startNeckStretch } from "../components/StretchNeck";
+import { updateProfile } from "firebase/auth";
 //import { set } from "firebase/database";
 //import { startWaistStretch } from "../components/StretchWaist";
 
