@@ -76,7 +76,7 @@ function Pomo() {
         };
         
         await addDoc(pomodoroRef, pomodoroData);
-        console.log("Work session completed and saved");
+        console.log(`Work session completed and saved: 猫背=${poseScore.catSpine}`);
 
 
         if (Notification.permission === 'granted') {
