@@ -5,32 +5,48 @@ import {
   query, 
   where, 
   getDocs,
-  Timestamp 
+  Timestamp,
+  doc,
+  getDoc 
 } from 'firebase/firestore';
-import { COLLECTIONS, getUserCollectionPath } from '../firebase/types';
+import { COLLECTIONS, getUserCollectionPath, FRIEND_REQUEST_STATUS } from '../firebase/types';
 
 export function useRankings() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // フレンドリストの取得処理を修正
+  const getFriendsList = async (userId) => {
+    try {
+      // FRIENDSコレクションから直接フレンドを取得
+      const friendsRef = collection(db, getUserCollectionPath(userId, COLLECTIONS.FRIENDS));
+      const friendsSnapshot = await getDocs(friendsRef);
+      
+      const friendIds = friendsSnapshot.docs.map(doc => doc.data().userId);
+      console.log('Found friends:', friendIds);
+      
+      return friendIds;
+    } catch (error) {
+      console.error('Error fetching friends:', error);
+      return [];
+    }
+  };
 
   const getStartDate = (period) => {
     const now = new Date();
     switch (period) {
       case 'daily': {
         const start = new Date(now.setHours(0, 0, 0, 0));
-        console.log('Daily start:', start);
         return start;
       }
       case 'weekly': {
         const start = new Date(now);
         start.setDate(start.getDate() - start.getDay());
         start.setHours(0, 0, 0, 0);
-        console.log('Weekly start:', start);
         return start;
       }
       case 'monthly': {
         const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        console.log('Monthly start:', start);
         return start;
       }
       default:
@@ -38,35 +54,47 @@ export function useRankings() {
     }
   };
 
-  const getPomodoroRanking = useCallback(async (period = 'daily', rankingLimit = 10) => {
+  // ユーザー情報の一括取得
+  const getUsersInfo = async (userIds) => {
+    const users = await Promise.all(
+      userIds.map(async (userId) => {
+        const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userId));
+        if (userDoc.exists()) {
+          return {
+            id: userDoc.id,
+            ...userDoc.data()
+          };
+        }
+        return null;
+      })
+    );
+    return users.filter(user => user !== null);
+  };
+
+  const getPomodoroRanking = useCallback(async (period = 'daily', rankingLimit = 10, currentUserId) => {
     try {
       setLoading(true);
       setError(null);
 
-      const startDate = getStartDate(period);
-      console.log('Ranking period start:', startDate);
+      // フレンドリストを取得
+      const friendIds = await getFriendsList(currentUserId);
+      const targetUserIds = [currentUserId, ...friendIds];
 
-      const usersRef = collection(db, COLLECTIONS.USERS);
-      const userSnap = await getDocs(usersRef);
-      const users = userSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      console.log('Found users:', users.length);
+      // ユーザー情報を一括取得
+      const users = await getUsersInfo(targetUserIds);
+      console.log('Target users:', users);
 
       const rankings = await Promise.all(
         users.map(async user => {
           const pomodorosRef = collection(db, getUserCollectionPath(user.id, COLLECTIONS.POMODOROS));
           const q = query(
             pomodorosRef,
-            where('startTime', '>=', Timestamp.fromDate(startDate)),
+            where('startTime', '>=', Timestamp.fromDate(getStartDate(period))),
             where('mode', '==', 'work')
           );
           
           try {
             const pomodoros = await getDocs(q);
-            console.log(`User ${user.displayName} pomodoros:`, pomodoros.size);
-
             const stats = {
               userId: user.id,
               username: user.displayName,
@@ -113,7 +141,6 @@ export function useRankings() {
         })
         .slice(0, rankingLimit);
 
-      console.log('Valid rankings:', validRankings);
       return validRankings;
 
     } catch (error) {
@@ -125,25 +152,24 @@ export function useRankings() {
     }
   }, []);
 
-  const getPostureRanking = useCallback(async (period = 'daily', rankingLimit = 10) => {
+  const getPostureRanking = useCallback(async (period = 'daily', rankingLimit = 10, currentUserId) => {
     try {
       setLoading(true);
       setError(null);
 
-      const startDate = getStartDate(period);
-      const usersRef = collection(db, COLLECTIONS.USERS);
-      const userSnap = await getDocs(usersRef);
-      const users = userSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      // フレンドリストを取得
+      const friendIds = await getFriendsList(currentUserId);
+      const targetUserIds = [currentUserId, ...friendIds];
+
+      // ユーザー情報を一括取得
+      const users = await getUsersInfo(targetUserIds);
 
       const rankings = await Promise.all(
         users.map(async user => {
           const pomodorosRef = collection(db, getUserCollectionPath(user.id, COLLECTIONS.POMODOROS));
           const q = query(
             pomodorosRef,
-            where('startTime', '>=', Timestamp.fromDate(startDate)),
+            where('startTime', '>=', Timestamp.fromDate(getStartDate(period))),
             where('mode', '==', 'work')
           );
 

@@ -13,15 +13,17 @@ export function Rankings() {
   const [loadingState, setLoadingState] = useState('');
 
   useEffect(() => {
-    loadRankings();
-  }, [selectedPeriod, activeTab]);
+    if (currentUser?.uid) {
+      loadRankings();
+    }
+  }, [selectedPeriod, activeTab, currentUser]);
 
   const loadRankings = async () => {
     try {
       setLoadingState('loading');
       const [pomoRankings, postRankings] = await Promise.all([
-        getPomodoroRanking(selectedPeriod),
-        getPostureRanking(selectedPeriod)
+        getPomodoroRanking(selectedPeriod, 10, currentUser.uid),
+        getPostureRanking(selectedPeriod, 10, currentUser.uid)
       ]);
       
       console.log('Loaded pomo rankings:', pomoRankings);
@@ -45,7 +47,7 @@ export function Rankings() {
   const getNoDataMessage = () => {
     const period = periodLabels[selectedPeriod];
     const type = activeTab === 'pomodoro' ? 'ポモドーロ' : '姿勢スコア';
-    return `${period}の${type}データはまだありません`;
+    return `${period}のフレンドの${type}データはまだありません`;
   };
 
   const RankingCard = ({ rank, data, type }) => {
@@ -110,7 +112,12 @@ export function Rankings() {
     <div className="max-w-4xl mx-auto p-4 space-y-6">
       {/* ヘッダー部分 */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold">ランキング</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold">フレンドランキング</h2>
+          <span className="text-sm text-gray-500">
+            (フレンドと自分のみ表示)
+          </span>
+        </div>
         <div className="flex flex-wrap gap-2">
           {Object.entries(periodLabels).map(([key, label]) => (
             <button
@@ -154,7 +161,11 @@ export function Rankings() {
 
       {/* ランキング表示部分 */}
       <div className="min-h-[400px]">
-        {loadingState === 'loading' ? (
+        {!currentUser ? (
+          <div className="flex items-center justify-center h-64">
+            <p className="text-gray-600">ランキングを表示するにはログインが必要です</p>
+          </div>
+        ) : loadingState === 'loading' ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <p className="text-gray-600">ランキングを読み込み中...</p>

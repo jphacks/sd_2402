@@ -3,6 +3,9 @@ import { useAuth } from '../auth/AuthProvider';
 import { useGroups } from '../hooks/useGroups';
 import { useFriends } from '../hooks/useFriends';
 import { GROUP_INVITATION_STATUS } from '../firebase/types';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { COLLECTIONS } from '../firebase/types';
 
 export function GroupManagement() {
   const { currentUser } = useAuth();
@@ -31,10 +34,28 @@ export function GroupManagement() {
     endDate: new Date(new Date().setHours(23, 59, 59, 999))
   });
 
-  // 初期データの読み込み
+  const [currentUserInfo, setCurrentUserInfo] = useState({
+    username: currentUser.displayName || currentUser.email
+  });
+
+  // 初期データ読み込み時にユーザー情報も取得
   useEffect(() => {
     if (currentUser) {
       loadInitialData();
+      // 必要に応じて、ここで現在のユーザーの詳細情報を取得
+      const getUserInfo = async () => {
+        try {
+          const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, currentUser.uid));
+          if (userDoc.exists()) {
+            setCurrentUserInfo({
+              username: userDoc.data().displayName || currentUser.email
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching user info:', error);
+        }
+      };
+      getUserInfo();
     }
   }, [currentUser]);
 
@@ -271,7 +292,7 @@ export function GroupManagement() {
                         const memberStats = categoryUsage[pomo.categoryName].memberDetails.get(memberId) || {
                             // friends配列からユーザー名を検索
                             username: memberId === currentUser.uid 
-                                ? currentUser.displayName || currentUser.email 
+                                ? currentUserInfo.username 
                                 : friends.find(friend => friend.userId === memberId)?.username || 'Unknown User',
                             duration: 0,
                             taskCount: 0
