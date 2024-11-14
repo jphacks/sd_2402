@@ -281,37 +281,49 @@ function Camera({ mode, setMode, waitForWorking, stdUrl, setStdUrl, setPoseScore
       </div>
 
       {/* カメラビュー */}
-      <div className="relative">
-        {isEnabled && (
-          <>
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              width={640}
-              height={480}
-              screenshotFormat="image/jpeg"
-              videoConstraints={videoConstraints}
-              className="rounded-lg shadow-lg w-full"
-              mirrored={true}
-              onUserMediaError={(error) => {
-                console.error("Webcam error:", error);
-              }}
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute top-0 left-0 w-full h-full"
-            />
-            
-
-          </>
-        )}
-        {!isEnabled && (
-          <div className="bg-gray-100 rounded-lg p-8 text-center">
-            <p className="text-gray-600">
-              カメラをオンにして笑顔を検出します
-            </p>
+      <div className="space-y-4"> {/* コンテナに空白を追加 */}
+        {mode === 'waitForWorking' && (
+          <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-800">
+            <p className="font-medium">正しい姿勢で笑顔を見せてください：</p>
+            <ul className="list-disc list-inside mt-1">
+              <li>背筋を伸ばして座る</li>
+              <li>画面との適切な距離を保つ</li>
+              <li>肩の高さを均等に</li>
+            </ul>
           </div>
         )}
+        <div className="relative">
+          {isEnabled && (
+            <>
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                width={640}
+                height={480}
+                screenshotFormat="image/jpeg"
+                videoConstraints={videoConstraints}
+                className="rounded-lg shadow-lg w-full"
+                mirrored={true}
+                onUserMediaError={(error) => {
+                  console.error("Webcam error:", error);
+                }}
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute top-0 left-0 w-full h-full"
+              />
+              
+
+            </>
+          )}
+          {!isEnabled && (
+            <div className="bg-gray-100 rounded-lg p-8 text-center">
+              <p className="text-gray-600">
+                カメラをオンにして笑顔を検出します
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {isEnabled && !isModelLoaded && (
