@@ -14,12 +14,20 @@ import { startNeckStretch } from "../components/StretchNeck";
 //import { set } from "firebase/database";
 //import { startWaistStretch } from "../components/StretchWaist";
 
+const WORK_MIN = 0
+const BREAK_MIN = 0
+const LONG_BREAK_MIN = 0
+
+const WORK_SEC = 25
+const BREAK_SEC = 5
+const LONG_BREAK_SEC = 15
+
 function Pomo() {
   const { currentUser } = useAuth();
-  const [minutes, setMinutes] = useState(0);
-  const [seconds, setSeconds] = useState(25);
+  const [minutes, setMinutes] = useState(WORK_MIN);
+  const [seconds, setSeconds] = useState(WORK_SEC);
   const [isActive, setIsActive] = useState(false);
-  const [mode, setMode] = useState('work');
+  const [mode, setMode] = useState('waitForWorking');
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [newCategory, setNewCategory] = useState('');
@@ -107,8 +115,8 @@ function Pomo() {
           shallowSitting: 0,
           distorting: 0
         });
-        setMinutes(0);
-        setSeconds(30);
+        setMinutes(WORK_MIN);
+        setSeconds(WORK_SEC);
         setMode('waitForWorking');
         setIsActive(false);
       }
@@ -171,8 +179,8 @@ function Pomo() {
       distorting: 0,
       shallowSitting: 0
     });
-    setMinutes(0);
-    setSeconds(25);
+    setMinutes(WORK_MIN);
+    setSeconds(WORK_SEC);
     setWaitingForSmile(false);
     setSessionCount(1);
     console.log("Timer reset");
@@ -183,12 +191,12 @@ function Pomo() {
     if (waitingForSmile) {
       //休憩開始時
       if (sessionCount == 4) {
-        setMinutes(0);
-        setSeconds(30);
+        setMinutes(LONG_BREAK_MIN);
+        setSeconds(LONG_BREAK_SEC);
         setSessionCount(0);
       } else {
-        setMinutes(0);
-        setSeconds(15);
+        setMinutes(BREAK_MIN);
+        setSeconds(BREAK_SEC);
       }
       setMode('break');
       setIsActive(true);
