@@ -129,7 +129,7 @@ function Dashboard() {
           {/* 日別推移グラフ */}
           <div className="bg-white rounded-lg shadow p-4">
             <h2 className="text-lg font-medium text-gray-900 mb-4">
-              週間の推移
+              ポモドーロ完了数の推移
             </h2>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
