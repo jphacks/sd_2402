@@ -180,6 +180,19 @@ export function useFriends() {
     }
   }, []);
 
+  const getUserLatestInfo = async (userId) => {
+    try {
+      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userId));
+      if (!userDoc.exists) {
+        throw new Error('User not found');
+      }
+      return userDoc.data();
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+      throw error;
+    }
+  };
+
   /**
    * フレンドリストを取得
    * @type {FriendManagementFunctions['getFriends']}
@@ -327,6 +340,7 @@ export function useFriends() {
     getFriends,
     getFriendTodayPomodoros,
     getFriendWeekPomodoros,
-    getPomodoroStats
+    getPomodoroStats,
+    getUserLatestInfo
   };
 }

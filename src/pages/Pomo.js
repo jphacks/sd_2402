@@ -15,6 +15,14 @@ import { startShoulderStretch } from "../components/StretchShoulder";
 //import { set } from "firebase/database";
 import { startWaistStretch } from "../components/StretchWaist";
 
+const WORK_MIN = 0
+const BREAK_MIN = 0
+const LONG_BREAK_MIN = 0
+
+const WORK_SEC = 25
+const BREAK_SEC = 5
+const LONG_BREAK_SEC = 15
+
 function Pomo() {
   const { currentUser } = useAuth();
   // 時間設定
@@ -353,17 +361,15 @@ function Pomo() {
             </div>
 
             <div className="space-x-4">
-              <button
-                onClick={() => isActive ? setIsActive(false) : startTimer()}
-                disabled={!taskName || !selectedCategory || waitingForSmile}
-                className={`${
-                  !taskName || !selectedCategory || waitingForSmile
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-red-600 hover:bg-red-700'
-                } text-white px-6 py-2 rounded-md transition-colors duration-200`}
-              >
-                {isActive ? '一時停止' : 'スタート'}
-              </button>
+              {/* スタートボタンを削除 */}
+              {!waitForWorking && isActive && (
+                <button
+                  onClick={() => setIsActive(false)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-md transition-colors duration-200"
+                >
+                  一時停止
+                </button>
+              )}
               <button
                 onClick={resetTimer}
                 className="border border-red-600 text-red-600 px-6 py-2 rounded-md hover:bg-red-50 transition-colors duration-200"
@@ -671,7 +677,3 @@ function Pomo() {
 }
 
 export default Pomo;
-
-
-
-
