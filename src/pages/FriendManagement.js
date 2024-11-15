@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { useFriends } from '../hooks/useFriends';
 import { FRIEND_REQUEST_STATUS } from '../firebase/types';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { COLLECTIONS } from '../firebase/types';
 
 export function FriendsManagement() {
   const { currentUser } = useAuth();
@@ -15,7 +18,7 @@ export function FriendsManagement() {
     getFriends,
     getFriendTodayPomodoros,
     getFriendWeekPomodoros,
-    getPomodoroStats
+    getPomodoroStats,
   } = useFriends();
 
   const [searchUsername, setSearchUsername] = useState('');
@@ -27,6 +30,39 @@ export function FriendsManagement() {
   const [friendPomodoros, setFriendPomodoros] = useState({ today: [], week: [] });
   const [pomodoroStats, setPomodoroStats] = useState({ today: null, week: null });
   const [message, setMessage] = useState('');
+
+  // 友達のdisplayName取得用の関数
+  const getFriendDisplayName = async (userId) => {
+    try {
+      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userId));
+      if (userDoc.exists()) {
+        return userDoc.data().displayName;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching friend display name:', error);
+      return null;
+    }
+  };
+
+  // フレンドリストを最新のdisplayNameで更新する関数
+  const updateFriendsWithLatestNames = async (friendsList) => {
+    try {
+      const updatedFriends = await Promise.all(
+        friendsList.map(async (friend) => {
+          const latestDisplayName = await getFriendDisplayName(friend.userId);
+          return {
+            ...friend,
+            username: latestDisplayName || friend.username // fallback to existing username if fetch fails
+          };
+        })
+      );
+      return updatedFriends;
+    } catch (error) {
+      console.error('Error updating friend names:', error);
+      return friendsList;
+    }
+  };
 
   // 初期データの読み込み
   useEffect(() => {
@@ -70,7 +106,8 @@ export function FriendsManagement() {
   const loadFriends = async () => {
     try {
       const friendsList = await getFriends(currentUser.uid);
-      setFriends(friendsList);
+      const updatedFriendsList = await updateFriendsWithLatestNames(friendsList);
+      setFriends(updatedFriendsList);
     } catch (error) {
       setMessage(error.message);
     }
@@ -126,8 +163,13 @@ export function FriendsManagement() {
     }
   };
 
+  // フレンド選択時に最新の表示名を再取得
   const handleFriendSelect = async (friend) => {
-    setSelectedFriend(friend);
+    const latestDisplayName = await getFriendDisplayName(friend.userId);
+    setSelectedFriend({
+      ...friend,
+      username: latestDisplayName || friend.username
+    });
     await loadFriendPomodoros(friend.userId);
   };
 
@@ -160,7 +202,7 @@ export function FriendsManagement() {
             <h5 className="font-medium mb-2">基本統計</h5>
             <div className="space-y-2">
               <p>総ポモドーロ数: {stats.totalCount}</p>
-              <p>総作業時間: {stats.totalDuration}分</p>
+              <p>総作業時間: {Math.ceil(stats.totalDuration)}分</p>
             </div>
           </div>
 
@@ -197,7 +239,7 @@ export function FriendsManagement() {
                   <p className="text-sm text-gray-600">{pomo.categoryName}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm">{pomo.duration}分</p>
+                  <p className="text-sm">{Math.ceil(pomo.duration)}分</p>
                   <p className="text-sm text-gray-600">
                     {new Date(pomo.startTime).toLocaleTimeString()}
                   </p>
@@ -304,7 +346,7 @@ export function FriendsManagement() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {friends.map(friend => (
               <div 
-                key={friend.id} 
+                key={friend.userId} 
                 className={`p-4 bg-white shadow rounded-lg cursor-pointer transition-colors
                   ${selectedFriend?.userId === friend.userId ? 'ring-2 ring-blue-500' : 'hover:bg-gray-50'}`}
                 onClick={() => handleFriendSelect(friend)}

@@ -29,14 +29,89 @@ export function GroupManagement() {
   const [groupStats, setGroupStats] = useState(null);
   const [message, setMessage] = useState('');
   const [newGroupData, setNewGroupData] = useState({ name: '', description: '' });
+  // 初期の日付範囲を全期間に設定
   const [dateRange, setDateRange] = useState({
-    startDate: new Date(new Date().setHours(0, 0, 0, 0)),
-    endDate: new Date(new Date().setHours(23, 59, 59, 999))
+    // グループ作成日以降の全データを取得するため、十分に過去の日付を設定
+    startDate: new Date('2000-01-01'),
+    // 未来のデータも含めるため、十分に先の日付を設定
+    endDate: new Date('2100-12-31')
   });
 
   const [currentUserInfo, setCurrentUserInfo] = useState({
     username: currentUser.displayName || currentUser.email
   });
+
+  // フレンドのdisplayName取得用の関数
+  const getFriendDisplayName = async (userId) => {
+    try {
+      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userId));
+      if (userDoc.exists()) {
+        return userDoc.data().displayName;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching friend display name:', error);
+      return null;
+    }
+  };
+
+  // フレンドリストを最新のdisplayNameで更新する関数
+  const updateFriendsWithLatestNames = async (friendsList) => {
+    try {
+      const updatedFriends = await Promise.all(
+        friendsList.map(async (friend) => {
+          const latestDisplayName = await getFriendDisplayName(friend.userId);
+          return {
+            ...friend,
+            username: latestDisplayName || friend.username // fallback to existing username if fetch fails
+          };
+        })
+      );
+      return updatedFriends;
+    } catch (error) {
+      console.error('Error updating friend names:', error);
+      return friendsList;
+    }
+  };
+
+  const loadInitialData = async () => {
+    try {
+      const [userGroups, friendsList, invitations] = await Promise.all([
+        getUserGroups(currentUser.uid),
+        getFriends(currentUser.uid),
+        getReceivedGroupInvitations(currentUser.uid)
+      ]);
+      
+      // フレンドリストを最新の名前で更新
+      const updatedFriends = await updateFriendsWithLatestNames(friendsList);
+      
+      setGroups(userGroups);
+      setFriends(updatedFriends);
+      setGroupInvitations(invitations);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
+  const handleInviteFriend = async (groupId, friend) => {
+    try {
+      // 招待時に最新の表示名を取得
+      const latestDisplayName = await getFriendDisplayName(friend.userId);
+      
+      const fromUser = {
+        uid: currentUser.uid,
+        displayName: currentUserInfo.username
+      };
+      const toUser = {
+        uid: friend.userId,
+        displayName: latestDisplayName || friend.username
+      };
+      await inviteToGroup(groupId, fromUser, toUser);
+      setMessage(`${toUser.displayName}をグループに招待しました`);
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
 
   // 初期データ読み込み時にユーザー情報も取得
   useEffect(() => {
@@ -59,44 +134,12 @@ export function GroupManagement() {
     }
   }, [currentUser]);
 
-  const loadInitialData = async () => {
-    try {
-      const [userGroups, friendsList, invitations] = await Promise.all([
-        getUserGroups(currentUser.uid),
-        getFriends(currentUser.uid),
-        getReceivedGroupInvitations(currentUser.uid)
-      ]);
-      setGroups(userGroups);
-      setFriends(friendsList);
-      setGroupInvitations(invitations);
-    } catch (error) {
-      setMessage(error.message);
-    }
-  };
-
   const handleCreateGroup = async () => {
     try {
       await createGroup(currentUser.uid, newGroupData);
       setNewGroupData({ name: '', description: '' });
       await loadInitialData();
       setMessage('グループを作成しました');
-    } catch (error) {
-      setMessage(error.message);
-    }
-  };
-
-  const handleInviteFriend = async (groupId, friend) => {
-    try {
-      const fromUser = {
-        uid: currentUser.uid,
-        displayName: currentUser.displayName || currentUser.email
-      };
-      const toUser = {
-        uid: friend.userId,
-        displayName: friend.username
-      };
-      await inviteToGroup(groupId, fromUser, toUser);
-      setMessage(`${friend.username}をグループに招待しました`);
     } catch (error) {
       setMessage(error.message);
     }
@@ -129,10 +172,50 @@ export function GroupManagement() {
     }
   };
 
+  // グループ統計情報の表示部分を修正
+  const updateStatsWithLatestNames = async (stats) => {
+    if (!stats || !stats.memberStats) return stats;
+
+    const updatedMemberStats = {};
+    for (const [memberId, pomodoros] of Object.entries(stats.memberStats)) {
+      updatedMemberStats[memberId] = pomodoros;
+    }
+
+    return {
+      ...stats,
+      memberStats: updatedMemberStats
+    };
+  };
+
   const loadGroupStats = async (groupId) => {
     try {
+      // 全期間のデータを取得
       const stats = await getGroupPomodoroStats(groupId, dateRange.startDate, dateRange.endDate);
-      setGroupStats(stats);
+      
+      // メンバーの名前を最新のものに更新
+      const updatedStats = {
+        ...stats,
+        memberStats: { ...stats.memberStats }
+      };
+
+      // メンバーIDとポモドーロデータのマッピングを更新
+      for (const memberId of Object.keys(updatedStats.memberStats)) {
+        let displayName;
+        if (memberId === currentUser.uid) {
+          displayName = currentUserInfo.username;
+        } else {
+          displayName = await getFriendDisplayName(memberId);
+        }
+        
+        if (displayName) {
+          updatedStats.memberStats[memberId] = updatedStats.memberStats[memberId].map(pomo => ({
+            ...pomo,
+            memberName: displayName
+          }));
+        }
+      }
+
+      setGroupStats(updatedStats);
     } catch (error) {
       setMessage(error.message);
     }
@@ -266,58 +349,54 @@ export function GroupManagement() {
             {groupStats && (
             <div className="space-y-4">
                 <div className="p-4 bg-white shadow rounded-lg">
-                <h4 className="font-medium mb-4">共通カテゴリーの活動状況</h4>
+                {/* タイトルを変更して全期間であることを明示 */}
+                <h4 className="font-medium mb-4">共通カテゴリーの全期間の活動状況</h4>
                 {(() => {
                     const memberCount = Object.keys(groupStats.memberStats).length;
                     
                     // メンバーごとのカテゴリー使用状況を集計
                     const categoryUsage = {};
-                    // カテゴリー使用状況を集計する部分で、メンバー情報を設定する際に修正
                     Object.entries(groupStats.memberStats).forEach(([memberId, pomodoros]) => {
-                        // そのメンバーが使用したカテゴリーを集計
-                        pomodoros.forEach(pomo => {
+                    pomodoros.forEach(pomo => {
                         if (!categoryUsage[pomo.categoryName]) {
-                            categoryUsage[pomo.categoryName] = {
+                        categoryUsage[pomo.categoryName] = {
                             members: new Set(),
                             totalDuration: 0,
                             tasks: new Map(),
                             memberDetails: new Map()
-                            };
+                        };
                         }
                         
                         categoryUsage[pomo.categoryName].members.add(memberId);
                         categoryUsage[pomo.categoryName].totalDuration += pomo.duration;
-                    
+
                         // メンバーごとの作業時間を集計
                         const memberStats = categoryUsage[pomo.categoryName].memberDetails.get(memberId) || {
-                            // friends配列からユーザー名を検索
-                            username: memberId === currentUser.uid 
-                                ? currentUserInfo.username 
-                                : friends.find(friend => friend.userId === memberId)?.username || 'Unknown User',
-                            duration: 0,
-                            taskCount: 0
+                        username: pomo.memberName || 'Unknown User', // memberNameを使用
+                        duration: 0,
+                        taskCount: 0
                         };
                         memberStats.duration += pomo.duration;
                         memberStats.taskCount += 1;
                         categoryUsage[pomo.categoryName].memberDetails.set(memberId, memberStats);
-                    
-                        // 以下、タスクの集計部分は変更なし
+
+                        // タスクの集計
                         const taskKey = pomo.taskName;
                         const taskStats = categoryUsage[pomo.categoryName].tasks.get(taskKey) || {
-                            name: pomo.taskName,
-                            duration: 0,
-                            count: 0
+                        name: pomo.taskName,
+                        duration: 0,
+                        count: 0
                         };
                         taskStats.duration += pomo.duration;
                         taskStats.count += 1;
                         categoryUsage[pomo.categoryName].tasks.set(taskKey, taskStats);
-                        });
+                    });
                     });
 
                     // 全員が使用している共通カテゴリーのみをフィルタリング
                     const commonCategories = Object.entries(categoryUsage)
                     .filter(([_, info]) => info.members.size === memberCount)
-                    .sort((a, b) => b[1].totalDuration - a[1].totalDuration); // 総作業時間で降順ソート
+                    .sort((a, b) => b[1].totalDuration - a[1].totalDuration);
 
                     if (commonCategories.length === 0) {
                     return (
@@ -332,7 +411,8 @@ export function GroupManagement() {
                         <div className="border-b border-gray-300 pb-2 mb-4">
                         <h5 className="text-lg font-medium text-blue-600">{categoryName}</h5>
                         <div className="text-sm text-gray-600 flex gap-4">
-                            <span>総作業時間: {categoryInfo.totalDuration}分</span>
+                            {/* durationを丸める */}
+                            <span>総作業時間: {Math.ceil(categoryInfo.totalDuration)}分</span>
                             <span>総タスク数: {Array.from(categoryInfo.tasks.values()).reduce((acc, task) => acc + task.count, 0)}</span>
                         </div>
                         </div>
@@ -347,8 +427,9 @@ export function GroupManagement() {
                                 .map((memberStats, index) => (
                                 <div key={index} className="flex justify-between items-center text-sm">
                                     <span className="text-gray-700">{memberStats.username}</span>
+                                    {/* durationを丸める */}
                                     <span className="text-gray-600">
-                                    {memberStats.duration}分 ({memberStats.taskCount}タスク)
+                                    {Math.ceil(memberStats.duration)}分 ({memberStats.taskCount}タスク)
                                     </span>
                                 </div>
                                 ))}
@@ -365,8 +446,9 @@ export function GroupManagement() {
                                 .map((taskStats, index) => (
                                 <div key={index} className="flex justify-between items-center text-sm">
                                     <span className="text-gray-700">{taskStats.name}</span>
+                                    {/* durationを丸める */}
                                     <span className="text-gray-600">
-                                    {taskStats.duration}分 ({taskStats.count}回)
+                                    {Math.ceil(taskStats.duration)}分 ({taskStats.count}回)
                                     </span>
                                 </div>
                                 ))}
@@ -380,9 +462,9 @@ export function GroupManagement() {
             </div>
             )}
         </div>
-      )}
+        )}
     </div>
-  );
+    );
 }
 
 export default GroupManagement;

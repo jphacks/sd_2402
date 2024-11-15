@@ -275,7 +275,7 @@ function Dashboard() {
                       {pomo.taskName}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {pomo.duration}分
+                      {Math.ceil(pomo.duration)}分
                     </td>
                   </tr>
                 ))}
