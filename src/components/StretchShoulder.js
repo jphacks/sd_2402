@@ -4,11 +4,6 @@ import { Pose } from '@mediapipe/pose';
 
 // ヘルパー関数
 
-function playAudio(file){
-  const audio = new Audio(file);
-  audio.play();
-}
-
 // 特定のサイドのランドマークを取得
 function getBodyPoints(landmarks, side) {
   if (side === 'left') {
@@ -36,14 +31,9 @@ function calculateAngle(point1, point2) {
 function isStretchingShoulder(landmarks, side = 'right') {
   if (!landmarks) return false;
 
-  const { shoulder, elbow, wrist } = getBodyPoints(landmarks, side);
+  const { shoulder: shoulder, wrist: wrist } = getBodyPoints(landmarks, side);
   const oppositeSide = side === 'right' ? 'left' : 'right';
   const { elbow: oppositeElbow, wrist: oppositeWrist } = getBodyPoints(landmarks, oppositeSide);
-
-  // // エルボーのZ座標を比較
-  // if (elbow.z < oppositeElbow.z) {
-  //   return false;
-  // }
 
   // 肩と手首の角度を計算
   if (calculateAngle(shoulder, wrist) > 10.0) {
@@ -51,17 +41,17 @@ function isStretchingShoulder(landmarks, side = 'right') {
   }
 
   // 反対側の手首と肘の角度を計算
-  if ((90.0 - calculateAngle(oppositeWrist, oppositeElbow)) > 30.0) {
+  if ((90.0 - calculateAngle(oppositeWrist, oppositeElbow)) > 45.0) {
     return false;
   }
 
   // 手首、肘、肩のx座標の順序を確認
   if (side === 'left') {
-    if (!(wrist.x < elbow.x && elbow.x < shoulder.x)) {
+    if (!(wrist.x < shoulder.x) || !(oppositeElbow.y > oppositeWrist.y)) {
       return false;
     }
   } else if (side === 'right') {
-    if (!(wrist.x > elbow.x && elbow.x > shoulder.x)) {
+    if (!(wrist.x > shoulder.x) || !(oppositeElbow.y > oppositeWrist.y)) {
       return false;
     }
   }
@@ -69,20 +59,25 @@ function isStretchingShoulder(landmarks, side = 'right') {
   return true;
 }
 
+// 位置の日本語表示マッピング（追加）
+const positionLabels = {
+  right_stretch: '右肩',
+  left_stretch: '左肩'
+};
+
 // 肩のストレッチシーケンス管理クラス
 class ShoulderStretchSequence {
   constructor() {
-    this.sequence = ['center', 'right_stretch', 'center', 'left_stretch'];
+    this.sequence = ['right_stretch', 'left_stretch', 'right_stretch', 'left_stretch'];
     this.holdTimes = {
-      center: 2000,
-      right_stretch: 5000,
-      left_stretch: 5000
+      right_stretch: 3000,
+      left_stretch: 3000
     };
     this.currentStep = 0;
     this.positionStartTime = null;
     this.currentPosition = null;
     this.loopCount = 0;
-    this.maxLoops = 2;
+    this.maxLoops = 1;
   }
 
   update(position) {
@@ -163,7 +158,7 @@ function SequenceDisplay({ sequence, currentStep, remainingLoops }) {
                     idx === currentStep ? 'text-blue-700 font-semibold' : 'text-gray-600'
                   }`}
                 >
-                  {step.replace('_', ' ')}
+                  {positionLabels[step]} {/* 日本語表示に変更 */}
                 </span>
               </div>
               {/* ステップ間のライン */}
@@ -253,7 +248,6 @@ function ShoulderStretchModal({ onComplete }) {
 
         if (sequenceCompleted) {
           setCompleted(true);
-          playAudio('/musics/nice_stretch.wav');
           setTimeout(() => {
             onComplete();
           }, 2000);
@@ -318,7 +312,7 @@ function ShoulderStretchModal({ onComplete }) {
 
           {/* シーケンス表示を追加 */}
           <SequenceDisplay
-            sequence={['center', 'right_stretch', 'center', 'left_stretch']}
+            sequence={['right_stretch','left_stretch', 'right_stretch','left_stretch']}
             currentStep={stretchSeqRef.current ? stretchSeqRef.current.currentStep : 0}
             remainingLoops={remainingLoops}
           />
@@ -337,11 +331,6 @@ function ShoulderStretchModal({ onComplete }) {
               )}
               </>
             )}
-            <div className="flex justify-between mt-4">
-              <p className="text-lg text-yellow-600">
-                残りループ数: <strong>{remainingLoops}</strong>
-              </p>
-            </div>
           </div>
 
           {completed && !isWaiting && (
