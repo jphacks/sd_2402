@@ -14,6 +14,7 @@ import { startNeckStretch } from "../components/StretchNeck";
 import { startShoulderStretch } from "../components/StretchShoulder";
 //import { set } from "firebase/database";
 import { startWaistStretch } from "../components/StretchWaist";
+import { playAudio } from "../utils/audio";
 
 const WORK_MIN = 0
 const BREAK_MIN = 0
@@ -56,11 +57,6 @@ function Pomo() {
   const [stdImageUrl, setStdImageUrl] = useState(null);
   const [waitForWorking, setWaitingForWorking] = useState(true);
   const [sessionCount, setSessionCount] = useState(1);
-
-  function playAudio(file){
-    const audio = new Audio(file);
-    audio.play();
-  }
 
   // デバッグ用のログを追加
   const playNotificationSound = useCallback((mode) => {
