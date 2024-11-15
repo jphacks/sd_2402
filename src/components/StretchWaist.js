@@ -2,33 +2,39 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Pose } from '@mediapipe/pose';
 
-// 角度を計算する関数（ヒップからショルダーへのベクトルと垂直線との有向角度）
+// 角度計算関数の改善
 function calculateAngle(a, b) {
   // ベクトル: ヒップからショルダーへ
   const vector = [b[0] - a[0], b[1] - a[1]];
-  // 垂直上方向のベクトル（画面座標系ではY軸が下向きなので、上方向は-1）
+  // 垂直上方向のベクトル
   const vertical = [0, -1];
+  
+  // ベクトルの長さを計算
+  const vectorLength = Math.sqrt(vector[0] * vector[0] + vector[1] * vector[1]);
+  const verticalLength = 1;  // 垂直ベクトルの長さは1
 
-  // 有向角度を計算
-  const angle = Math.atan2(
-    vector[0] * vertical[1] - vector[1] * vertical[0],
-    vector[0] * vertical[0] + vector[1] * vertical[1]
-  );
+  // 内積を計算
+  const dotProduct = vector[0] * vertical[0] + vector[1] * vertical[1];
+  
+  // 角度を計算（アークコサインを使用）
+  const angle = Math.acos(dotProduct / (vectorLength * verticalLength));
   const angleDegrees = angle * (180 / Math.PI);
 
-  return angleDegrees;
+  // 左右の向きを判定
+  const cross = vector[0] * vertical[1] - vector[1] * vertical[0];
+  return cross < 0 ? angleDegrees : -angleDegrees;
 }
 
 // ストレッチシーケンス管理クラス
 class StretchSequence {
   constructor() {
-    this.sequence = ['center', 'forward', 'center', 'backward'];
-    this.holdTimes = { center: 2000, forward: 1000, backward: 1000 }; // 各ポジションのキープ時間（ミリ秒）
+    this.sequence = ['forward', 'backward', 'forward', 'backward'];
+    this.holdTimes = { center: 2000, forward: 2000, backward: 2000 }; // キープ時間を2000ミリ秒に統一
     this.currentStep = 0;
     this.positionStartTime = null;
     this.currentPosition = null;
     this.loopCount = 0;
-    this.maxLoops = 2;
+    this.maxLoops = 1; 
   }
 
   update(position) {
@@ -96,19 +102,31 @@ class StretchSequence {
   }
 }
 
+// ポジション名の変換関数をコンポーネントの外で定義
+const getPositionName = (pos) => {
+  switch (pos) {
+    case 'forward': return '前屈';
+    case 'backward': return '後ろ反り';
+    case 'center': return '真ん中';
+    default: return pos;
+  }
+};
+
+// SequenceDisplayコンポーネントの修正
 function SequenceDisplay({ sequence, currentStep, remainingLoops }) {
   return (
-    <div className="w-full px-4 py-2 bg-gray-100 rounded-lg mb-4">
-      <p className="text-lg text-gray-700">指示に従って腰をストレッチしてください。</p>
-      <div className="mt-4">
-        <h3 className="text-lg font-semibold text-blue-600">シーケンス</h3>
-        <div className="flex items-center justify-center mt-2">
+    <div className="w-full h-1/3 px-4 py-2 bg-gray-100 rounded-lg flex flex-col">
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-lg text-gray-700">立ち上がって右を向き、腰をストレッチしてください。</p>
+      </div>
+      <div className="flex-1 flex flex-col">
+        <h3 className="text-lg font-semibold text-blue-600 mb-2">シーケンス</h3>
+        <div className="flex items-center justify-center mb-2">
           {sequence.map((step, idx) => (
             <React.Fragment key={idx}>
-              {/* ステップアイコン */}
               <div className="flex flex-col items-center">
                 <div
-                  className={`w-10 h-10 flex items-center justify-center rounded-full mr-2 mb-1 ${
+                  className={`w-14 h-14 flex items-center justify-center rounded-full mr-2 mb-1 text-xl ${
                     idx < currentStep
                       ? 'bg-green-500 text-white'
                       : idx === currentStep
@@ -118,29 +136,27 @@ function SequenceDisplay({ sequence, currentStep, remainingLoops }) {
                 >
                   {idx < currentStep ? '✔️' : idx + 1}
                 </div>
-                <span
-                  className={`text-sm ${
-                    idx === currentStep ? 'text-blue-700 font-semibold' : 'text-gray-600'
-                  }`}
-                >
-                  {step}
+                <span className={`text-sm ${idx === currentStep ? 'text-blue-700 font-semibold' : 'text-gray-600'}`}>
+                  {getPositionName(step)}
                 </span>
               </div>
-              {/* ステップ間のライン */}
               {idx < sequence.length - 1 && (
-                <div className="flex-1 h-1 bg-gray-300 mx-2"></div>
+                <div className="flex-1 h-1 bg-gray-300 mx-2 max-w-[80px]"></div>
               )}
             </React.Fragment>
           ))}
         </div>
-        <p className="mt-4 text-lg text-yellow-600">
-          残りループ数: <strong>{remainingLoops}</strong>
-        </p>
+        <div className="text-center">
+          <p className="text-base text-yellow-600 font-semibold">
+            残りループ回数: <strong>{remainingLoops}</strong> 回
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
+// メインモーダルのグリッドレイアウト調整
 function WaistStretchModal({ onComplete }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -149,18 +165,41 @@ function WaistStretchModal({ onComplete }) {
   const [completed, setCompleted] = useState(false);
   const [countdown, setCountdown] = useState(0); // カウントダウンタイマー
   const [remainingLoops, setRemainingLoops] = useState(2);
-  const [sequence, setSequence] = useState(['center', 'forward', 'center', 'backward']);
+  const [sequence, setSequence] = useState(['forward', 'backward', 'forward', 'backward']);
   const [isWaiting, setIsWaiting] = useState(false); // 待機中かどうか
   const animationFrameIdRef = useRef(null); // animationFrameIdを管理
-  const initialAngleRef = useRef(null);
   const lastPositionRef = useRef('center');
   const [currentDetectedPosition, setCurrentDetectedPosition] = useState('center');
   const [currentAngle, setCurrentAngle] = useState(0);
-  const [calibrating, setCalibrating] = useState(true); // キャリブレーション中かどうか
-  const calibrationStartTimeRef = useRef(null);
-  const [message, setMessage] = useState(
-    '立ち上がって右を向き、左肩と左腰がカメラに映るようにしてください。'
-  );
+  const [message, setMessage] = useState('');
+  const lastPositionChangeTime = useRef(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 640, height: 480 });
+
+  useEffect(() => {
+    const updateCanvasSize = () => {
+      const vh = window.innerHeight;
+      const vw = window.innerWidth;
+      const maxHeight = vh * 0.65; // カメラビューの最大高さを65%に増加
+      const aspectRatio = 640 / 480;
+      
+      let newHeight = maxHeight;
+      let newWidth = newHeight * aspectRatio;
+      
+      if (newWidth > vw * 0.85) { // 幅の制限を85%に増加
+        newWidth = vw * 0.85;
+        newHeight = newWidth / aspectRatio;
+      }
+      
+      setCanvasSize({
+        width: Math.floor(newWidth),
+        height: Math.floor(newHeight)
+      });
+    };
+
+    updateCanvasSize();
+    window.addEventListener('resize', updateCanvasSize);
+    return () => window.removeEventListener('resize', updateCanvasSize);
+  }, []);
 
   useEffect(() => {
     let pose;
@@ -208,110 +247,115 @@ function WaistStretchModal({ onComplete }) {
 
       if (results.poseLandmarks) {
         const landmarks = results.poseLandmarks;
+        const shoulder = landmarks[11]; // 左肩
+        const hip = landmarks[23];      // 左腰
 
-        // 必要なランドマークの検出を確認
-        const requiredLandmarks = [11, 23]; // 左肩と左腰
-        const visibilityThreshold = 0.5;
+        // 必要なランドマークが全て検出されているかチェック
+        const allVisible = shoulder.visibility > 0.5 && hip.visibility > 0.5;
 
-        const allVisible = requiredLandmarks.every(
-          (index) => landmarks[index].visibility > visibilityThreshold
-        );
+        // ランドマークの可視化
+        canvasCtx.fillStyle = 'red';
+        canvasCtx.strokeStyle = 'white';
+        canvasCtx.lineWidth = 2;
+        
+        // 肩のランドマーク描画
+        canvasCtx.beginPath();
+        canvasCtx.arc(width - (shoulder.x * width), shoulder.y * height, 8, 0, 2 * Math.PI);
+        canvasCtx.fill();
+        canvasCtx.stroke();
+        
+        // 腰のランドマーク描画
+        canvasCtx.beginPath();
+        canvasCtx.arc(width - (hip.x * width), hip.y * height, 8, 0, 2 * Math.PI);
+        canvasCtx.fill();
+        canvasCtx.stroke();
+        
+        // 肩と腰を結ぶ線を描画
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(width - (shoulder.x * width), shoulder.y * height);
+        canvasCtx.lineTo(width - (hip.x * width), hip.y * height);
+        canvasCtx.strokeStyle = 'yellow';
+        canvasCtx.lineWidth = 4;
+        canvasCtx.stroke();
 
-        console.log('All landmarks visible:', allVisible); // デバッグ用
+        // 垂直基準線の描画
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(width - (hip.x * width), hip.y * height);
+        canvasCtx.lineTo(width - (hip.x * width), hip.y * height - 100);
+        canvasCtx.strokeStyle = 'blue';
+        canvasCtx.setLineDash([5, 5]);
+        canvasCtx.stroke();
+        canvasCtx.setLineDash([]);
 
-        if (calibrating) {
-          if (allVisible) {
-            if (!calibrationStartTimeRef.current) {
-              calibrationStartTimeRef.current = Date.now();
-              setMessage('そのまま動かずにお待ちください...');
-            } else {
-              const elapsedTime = Date.now() - calibrationStartTimeRef.current;
-              if (elapsedTime >= 2000) {
-                const shoulder = landmarks[11];
-                const hip = landmarks[23];
+        // 角度の計算を復活させ、表示だけをコメントアウト
+        const angle = calculateAngle([hip.x * width, hip.y * height], [shoulder.x * width, shoulder.y * height]);
+        /* 表示部分のみコメントアウト
+        canvasCtx.font = '20px Arial';
+        canvasCtx.fillStyle = 'white';
+        canvasCtx.fillText(`角度: ${angle.toFixed(1)}°`, 10, 30);
+        */
+        
+        setCurrentAngle(angle);
 
-                const shoulderCoords = [shoulder.x * width, shoulder.y * height];
-                const hipCoords = [hip.x * width, hip.y * height];
+        // ポジションの判定（固定の閾値を使用）
+        let position = lastPositionRef.current || 'center';
 
-                const angle = calculateAngle(hipCoords, shoulderCoords); // ヒップを基点としたショルダーベクトルの角度
-                initialAngleRef.current = angle;
-                console.log('Initial angle set:', initialAngleRef.current);
-                setCalibrating(false);
-                setMessage('');
-              }
-            }
-          } else {
-            calibrationStartTimeRef.current = null;
-            setMessage('左肩と左腰がカメラに映るようにしてください。');
-          }
-        } else {
-          if (allVisible) {
-            const shoulder = landmarks[11];
-            const hip = landmarks[23];
+        const forwardThreshold = -25;  // 前屈の閾値（角度が負に大きい）
+        const backwardThreshold = 25;  // 後屈の閾値（角度が正に大きい）
+        const centerThreshold = 10;     // 中心位置の許容範囲
 
-            const shoulderCoords = [shoulder.x * width, shoulder.y * height];
-            const hipCoords = [hip.x * width, hip.y * height];
+        if (angle <= forwardThreshold) {
+          position = 'forward';
+        } else if (angle >= backwardThreshold) {
+          position = 'backward';
+        } else if (Math.abs(angle) <= centerThreshold) {
+          position = 'center';
+        }
 
-            const angle = calculateAngle(hipCoords, shoulderCoords); // ヒップを基点としたショルダーベクトルの角度
-            setCurrentAngle(angle);
-
-            console.log('Current angle:', angle); // デバッグ用
-
-            // ポジションの判定
-            let position = lastPositionRef.current || 'center';
-
-            const angleDifference = angle - initialAngleRef.current;
-
-            const forwardThreshold = 3; // 前屈時の閾値（度）
-            const backwardThreshold = -3; // 後屈時の閾値（度）
-
-            if (angleDifference >= forwardThreshold) {
-              position = 'forward';
-            } else if (angleDifference <= backwardThreshold) {
-              position = 'backward';
-            } else {
-              position = 'center';
-            }
-
+        // ポジション変更の履歴を保持（急激な変更を防ぐ）
+        if (position !== lastPositionRef.current) {
+          const now = Date.now();
+          if (!lastPositionChangeTime.current || 
+              now - lastPositionChangeTime.current > 500) { // 500ms以上経過している場合のみ変更
             lastPositionRef.current = position;
-            setCurrentDetectedPosition(position);
-
-            // シーケンスを更新
-            const sequenceCompleted = stretchSeqRef.current.update(position);
-            if (sequenceCompleted) {
-              setCompleted(true);
-              onComplete();
-              return;
-            }
-
-            setNextPosition(stretchSeqRef.current.getNextPosition());
-            setRemainingLoops(stretchSeqRef.current.getRemainingLoops());
-
-            // カウントダウンタイマーの設定
-            if (stretchSeqRef.current.positionStartTime) {
-              const remainingTime = stretchSeqRef.current.getRemainingTime();
-              setCountdown(remainingTime);
-              setIsWaiting(true);
-            } else {
-              setIsWaiting(false);
-              setCountdown(0);
-            }
+            lastPositionChangeTime.current = now;
           } else {
-            setIsWaiting(false);
-            setCountdown(0);
-            setCurrentDetectedPosition('検出できません');
-            setCurrentAngle(null); // ランドマークが検出できない場合はnullにする
-            console.log('Landmarks not visible during sequence'); // デバッグ用
+            position = lastPositionRef.current;
           }
+        }
+
+        setCurrentDetectedPosition(position);
+
+        // シーケンスを更新
+        const sequenceCompleted = stretchSeqRef.current.update(position);
+
+        // メッセージ表示時のポジション名変換
+        setMessage(`次のポジション: ${getPositionName(stretchSeqRef.current.getNextPosition())}`);
+
+        if (sequenceCompleted) {
+          setCompleted(true);
+          onComplete();
+          return;
+        }
+
+        setNextPosition(stretchSeqRef.current.getNextPosition());
+        setRemainingLoops(stretchSeqRef.current.getRemainingLoops());
+
+        // カウントダウンタイマーの設定
+        if (stretchSeqRef.current.positionStartTime) {
+          const remainingTime = stretchSeqRef.current.getRemainingTime();
+          setCountdown(remainingTime);
+          setIsWaiting(true);
+        } else {
+          setIsWaiting(false);
+          setCountdown(0);
         }
       } else {
-        if (calibrating) {
-          calibrationStartTimeRef.current = null;
-          setMessage('左肩と左腰がカメラに映るようにしてください。');
-        }
+        setIsWaiting(false);
+        setCountdown(0);
         setCurrentDetectedPosition('検出できません');
         setCurrentAngle(null); // ランドマークが検出できない場合はnullにする
-        console.log('No pose landmarks detected'); // デバッグ用
+        console.log('Landmarks not visible during sequence'); // デバッグ用
       }
 
       // 次のフレームを処理
@@ -360,70 +404,63 @@ function WaistStretchModal({ onComplete }) {
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg p-4 w-full max-w-md relative">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-2xl font-bold text-gray-800">腰のストレッチ</h2>
+      <div className="bg-white rounded-lg shadow-lg p-1 w-[95vw] h-[95vh] flex flex-col">
+        <div className="flex justify-between items-center px-3 py-1">
+          <h2 className="text-3xl font-bold text-gray-800">腰のストレッチ</h2>
         </div>
-        <div className="flex flex-col items-center">
-          <video ref={videoRef} className="hidden"></video>
-          <canvas
-            ref={canvasRef}
-            className="border rounded-lg mb-4"
-            width="640"
-            height="480"
-          ></canvas>
+        
+        <div className="flex-1 grid grid-cols-[2fr,1.2fr] gap-1 p-1 h-full">
+          {/* 左側: カメラビュー */}
+          <div className="flex flex-col items-center justify-center">
+            <video ref={videoRef} className="hidden" />
+            <canvas
+              ref={canvasRef}
+              className="border rounded-lg"
+              width={canvasSize.width}
+              height={canvasSize.height}
+              style={{
+                width: `${canvasSize.width}px`,
+                height: `${canvasSize.height}px`
+              }}
+            />
+          </div>
 
-          {calibrating ? (
-            <div className="w-full px-4 py-2 bg-gray-100 rounded-lg mb-4">
-              <p className="text-lg text-blue-600">{message}</p>
+          {/* 右側: 情報表示 */}
+          <div className="flex flex-col gap-1 h-full">
+            <SequenceDisplay
+              sequence={sequence}
+              currentStep={stretchSeqRef.current ? stretchSeqRef.current.currentStep : 0}
+              remainingLoops={remainingLoops}
+            />
+
+            <div className="h-1/4 bg-gray-100 rounded-lg p-2 flex items-center justify-center">
+              <p className="text-2xl font-semibold text-blue-600">{message}</p>
             </div>
-          ) : (
-            <>
-              {/* シーケンス表示 */}
-              <SequenceDisplay
-                sequence={sequence}
-                currentStep={stretchSeqRef.current ? stretchSeqRef.current.currentStep : 0}
-                remainingLoops={remainingLoops}
-              />
 
-              <div className="w-full px-4 py-2 bg-gray-100 rounded-lg mb-4">
-                <p className="text-lg text-blue-600">
-                  現在検出された体勢: <strong>{currentDetectedPosition}</strong>
+            <div className="flex-1 bg-gray-100 rounded-lg p-3 flex flex-col justify-center">
+              <div className="pl-2 mb-4">
+                <p className="text-xl text-blue-600 mb-4">
+                  現在の姿勢: <strong className="text-2xl">{getPositionName(currentDetectedPosition)}</strong>
                 </p>
-                <p className="text-lg text-gray-700">
-                  現在の角度:{' '}
-                  <strong>
-                    {currentAngle !== null ? currentAngle.toFixed(2) : '検出できません'}
-                  </strong>
-                </p>
-                <p className="text-lg text-gray-700">
-                  初期角度:{' '}
-                  <strong>
-                    {initialAngleRef.current ? initialAngleRef.current.toFixed(2) : '計測中...'}
-                  </strong>
+                <p className="text-xl text-gray-700 mb-4">
+                  現在の角度: <strong className="text-2xl">{currentAngle !== null ? currentAngle.toFixed(2) : '検出できません'}</strong>
                 </p>
                 {isWaiting ? (
-                  <>
-                    <p className="text-lg text-blue-600">
-                      現在のポジション: <strong>{nextPosition}</strong>
-                    </p>
-                    <p className="text-lg text-green-600">
-                      キープしてください: <strong>{countdown}</strong> 秒
-                    </p>
-                  </>
+                  <p className="text-xl text-green-600 font-semibold">
+                    キープしてください: <strong className="text-3xl">{countdown}</strong> 秒
+                  </p>
                 ) : (
-                  <>
-                    <p className="mt-2 text-lg text-blue-600">
-                      次の動作: <strong>{nextPosition}</strong>
-                    </p>
-                  </>
+                  <p className="text-xl text-blue-600">
+                    次の動作: <strong className="text-2xl">{getPositionName(nextPosition)}</strong>
+                  </p>
                 )}
               </div>
-              {completed && !isWaiting && (
-                <p className="text-2xl font-semibold text-green-500">ストレッチ完了！</p>
-              )}
-            </>
-          )}
+            </div>
+
+            {completed && !isWaiting && (
+              <p className="text-2xl font-semibold text-green-500">ストレッチ完了！</p>
+            )}
+          </div>
         </div>
       </div>
     </div>,
@@ -452,13 +489,6 @@ export function startWaistStretch() {
 }
 
 export default WaistStretchModal;
-
-
-
-
-
-
-
 
 
 
