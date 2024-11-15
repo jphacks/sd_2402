@@ -28,10 +28,17 @@ function calculateHeadYaw(landmarks, imageWidth, imageHeight) {
   return -angleDeg; // ヨー角を反転
 }
 
+// 位置の日本語表示マッピング（追加）
+const positionLabels = {
+  left: '左',
+  right: '右',
+  center: '中央'
+};
+
 // ストレッチシーケンス管理クラス
 class StretchSequence {
   constructor(requiredDuration = 2000, maxLoops = 1) { // ミリ秒単位、最大ループ数
-    this.sequence = ['center', 'left', 'center', 'right'];
+    this.sequence = ['left', 'right', 'left', 'right']; // シーケンスを変更
     this.currentStep = 0;
     this.requiredDuration = requiredDuration;
     this.positionStartTime = null;
@@ -120,7 +127,7 @@ function SequenceDisplay({ sequence, currentStep, remainingLoops }) {
                     idx === currentStep ? 'text-blue-700 font-semibold' : 'text-gray-600'
                   }`}
                 >
-                  {step.charAt(0).toUpperCase() + step.slice(1)}
+                  {positionLabels[step]} {/* 日本語表示に変更 */}
                 </span>
               </div>
               {/* ステップ間のライン */}
@@ -147,7 +154,7 @@ function NeckStretchModal({ onComplete }) {
   const [completed, setCompleted] = useState(false);
   const [countdown, setCountdown] = useState(0); // カウントダウンタイマー
   const [remainingLoops, setRemainingLoops] = useState(1);
-  const [sequence, setSequence] = useState(['center', 'left', 'center', 'right']);
+  const [sequence, setSequence] = useState(['left', 'right', 'left', 'right']); // 初期シーケンスを変更
   const [isWaiting, setIsWaiting] = useState(false); // 2秒間待機中かどうか
 
   useEffect(() => {
@@ -391,7 +398,7 @@ function NeckStretchModal({ onComplete }) {
               <>
                 <p className="text-lg text-gray-700">指示に従って首をストレッチしてください。</p>
                 <p className="mt-2 text-lg text-blue-600">
-                  次の動作: <strong>{nextPosition.charAt(0).toUpperCase() + nextPosition.slice(1)}</strong>
+                  次の動作: <strong>{positionLabels[nextPosition]}</strong> {/* 日本語表示に変更 */}
                 </p>
               </>
             )}
@@ -401,9 +408,9 @@ function NeckStretchModal({ onComplete }) {
                   残り時間: <strong>{countdown}</strong> 秒
                 </p>
               )}
-              <p className="text-lg text-yellow-600">
+              {/*<p className="text-lg text-yellow-600">
                 残りループ数: <strong>{remainingLoops}</strong>
-              </p>
+              </p>*/}
             </div>
           </div>
           {completed && !isWaiting && (
