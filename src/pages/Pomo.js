@@ -13,7 +13,7 @@ import Camera from "../components/NewCamera";
 import { startNeckStretch } from "../components/StretchNeck";
 import { startShoulderStretch } from "../components/StretchShoulder";
 //import { set } from "firebase/database";
-//import { startWaistStretch } from "../components/StretchWaist";
+import { startWaistStretch } from "../components/StretchWaist";
 
 const WORK_MIN = 0
 const BREAK_MIN = 0
