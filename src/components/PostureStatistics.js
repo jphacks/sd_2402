@@ -42,7 +42,7 @@ const PostureStatistics = ({ sessions = [] }) => {
       
       // 過去7日間のデータのみを対象とする
       const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 30);
+      weekAgo.setDate(weekAgo.getDate() - 7); // ここを変更できる
       
       if (date < weekAgo) return acc;
       
@@ -99,7 +99,7 @@ const PostureStatistics = ({ sessions = [] }) => {
       return acc;
     }, { good: 0, catSpine: 0, shallowSitting: 0, distorting: 0 });
 
-    const total = Object.values(todayStats).reduce((sum, val) => sum + val, 0);
+    const total_today = Object.values(todayStats).reduce((sum, val) => sum + val, 0);
     
     const todayDistribution = [
       { name: '良好な姿勢', value: todayStats.good, color: COLORS.good },
@@ -108,8 +108,28 @@ const PostureStatistics = ({ sessions = [] }) => {
       { name: '体の歪み', value: todayStats.distorting, color: COLORS.distorting }
     ].filter(item => item.value > 0);
 
+    // 全期間の姿勢分布を集計
+    const allTimeStats = sessions.reduce((acc, session) => {
+      if (!session?.poseScore) return acc;
+      
+      acc.good += session.poseScore.good || 0;
+      acc.catSpine += session.poseScore.catSpine || 0;
+      acc.shallowSitting += session.poseScore.shallowSitting || 0;
+      acc.distorting += session.poseScore.distorting || 0;
+      return acc;
+    }, { good: 0, catSpine: 0, shallowSitting: 0, distorting: 0 });
+
+    const total_all = Object.values(allTimeStats).reduce((sum, val) => sum + val, 0);
+    
+    const allTimeDistribution = [
+      { name: '良好な姿勢', value: allTimeStats.good, color: COLORS.good },
+      { name: '猫背', value: allTimeStats.catSpine, color: COLORS.catSpine },
+      { name: '浅座り', value: allTimeStats.shallowSitting, color: COLORS.shallowSitting },
+      { name: '体の歪み', value: allTimeStats.distorting, color: COLORS.distorting }
+    ].filter(item => item.value > 0);
+
     // good以外で最大の問題を特定
-    const problems = todayDistribution.filter(item => item.name !== '良好な姿勢');
+    const problems = allTimeDistribution.filter(item => item.name !== '良好な姿勢');
     const worstProblem = problems.reduce((max, current) => 
       current.value > max.value ? current : max
     , { value: 0 });
@@ -117,6 +137,7 @@ const PostureStatistics = ({ sessions = [] }) => {
     return {
       daily: dailyArray,
       todayDistribution,
+      allTimeDistribution,
       worstProblem
     };
   }, [sessions]);
@@ -148,7 +169,7 @@ const PostureStatistics = ({ sessions = [] }) => {
       <div className="grid grid-cols-3 gap-8">
         {/* 姿勢推移グラフ - 2/3幅 */}
         <div className="col-span-2 space-y-4">
-          <h3 className="text-lg font-semibold text-gray-700">姿勢の推移</h3>
+          <h3 className="text-lg font-semibold text-gray-700">姿勢の推移（過去７日間）</h3>
           <div className="h-80">
             <ResponsiveContainer>
               <LineChart data={stats.daily}>
@@ -202,13 +223,13 @@ const PostureStatistics = ({ sessions = [] }) => {
 
         {/* 詳細スコア */}
         <div className="col-span-3">
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">姿勢スコアの詳細</h3>
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">全期間の姿勢スコア</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {stats.todayDistribution.map(item => (
+            {stats.allTimeDistribution.map(item => (
               <div key={item.name} className={getScoreCardStyle(item.name)}>
                 <p className="text-sm text-gray-600">{item.name}</p>
                 <p className="text-2xl font-bold text-gray-700">
-                  {((item.value / stats.todayDistribution.reduce((sum, d) => sum + d.value, 0)) * 100).toFixed(1)}%
+                  {((item.value / stats.allTimeDistribution.reduce((sum, d) => sum + d.value, 0)) * 100).toFixed(1)}%
                 </p>
               </div>
             ))}
