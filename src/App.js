@@ -7,6 +7,9 @@ import Signin from "./pages/Signin";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import Pomo from "./pages/Pomo";
+import FriendsManagement from "./pages/FriendManagement";
+import Rankings from "./pages/Rankings";
+import GroupManagement from "./pages/GroupManagement";
 
 function App() {
   return (
@@ -33,6 +36,30 @@ function App() {
                   <Pomo />
                 </RequireAuth>
               } 
+            />
+            <Route 
+              path="/friends" 
+              element={
+                <RequireAuth>
+                  <FriendsManagement />
+                </RequireAuth>
+              }
+            />
+            <Route 
+              path="/groups" 
+              element={
+                <RequireAuth>
+                  <GroupManagement />
+                </RequireAuth>
+              }
+            />
+            <Route 
+              path="/rankings" 
+              element={
+                <RequireAuth>
+                  <Rankings />
+                </RequireAuth>
+              }
             />
           </Routes>
         </div>
