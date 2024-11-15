@@ -39,25 +39,20 @@ class StretchSequence {
 
   update(position) {
     const currentTime = Date.now();
+    const expectedPosition = this.getNextPosition();
 
-    // ポジションが変わったらpositionStartTimeをリセット
-    if (position !== this.currentPosition) {
-      this.currentPosition = position;
-      this.positionStartTime = currentTime;
-    }
+    // 期待するポジションと現在のポジションが一致する場合のみ時間を計測
+    if (position === expectedPosition) {
+      if (position !== this.currentPosition || this.positionStartTime === null) {
+        this.currentPosition = position;
+        this.positionStartTime = currentTime;
+      }
 
-    if (this.positionStartTime === null) {
-      this.positionStartTime = currentTime;
-    }
+      const elapsedTime = currentTime - this.positionStartTime;
+      const requiredDuration = this.holdTimes[expectedPosition];
 
-    const requiredDuration = this.holdTimes[this.getNextPosition()];
-    const elapsedTime = currentTime - this.positionStartTime;
-
-    if (elapsedTime >= requiredDuration) {
-      const expected = this.sequence[this.currentStep];
-      console.log(`Expected position: ${expected}, Current position: ${this.currentPosition}`);
-      if (this.currentPosition === expected) {
-        console.log(`ステップ '${expected}' 完了`);
+      if (elapsedTime >= requiredDuration) {
+        console.log(`ステップ '${expectedPosition}' 完了`);
         this.currentStep += 1;
         if (this.currentStep >= this.sequence.length) {
           this.loopCount += 1;
@@ -69,7 +64,12 @@ class StretchSequence {
           this.currentStep = 0;
         }
         this.positionStartTime = null;
+        this.currentPosition = null;
       }
+    } else {
+      // ポジションが一致しない場合はタイマーをリセット
+      this.positionStartTime = null;
+      this.currentPosition = position;
     }
 
     return false;
@@ -95,7 +95,9 @@ class StretchSequence {
   }
 
   getRemainingTime() {
-    if (this.positionStartTime === null) return Math.ceil(this.getHoldTime() / 1000);
+    if (this.positionStartTime === null || this.currentPosition !== this.getNextPosition()) {
+      return Math.ceil(this.getHoldTime() / 1000);
+    }
     const elapsedTime = Date.now() - this.positionStartTime;
     const remainingTime = Math.max(0, this.getHoldTime() - elapsedTime);
     return Math.ceil(remainingTime / 1000);
@@ -112,13 +114,10 @@ const getPositionName = (pos) => {
   }
 };
 
-// SequenceDisplayコンポーネントの修正
+// SequenceDisplayコンポーネントから警告を削除
 function SequenceDisplay({ sequence, currentStep, remainingLoops }) {
   return (
     <div className="w-full h-1/3 px-4 py-2 bg-gray-100 rounded-lg flex flex-col">
-      <div className="flex justify-between items-center mb-2">
-        <p className="text-lg text-gray-700">立ち上がって右を向き、腰をストレッチしてください。</p>
-      </div>
       <div className="flex-1 flex flex-col">
         <h3 className="text-lg font-semibold text-blue-600 mb-2">シーケンス</h3>
         <div className="flex items-center justify-center mb-2">
@@ -329,8 +328,23 @@ function WaistStretchModal({ onComplete }) {
         // シーケンスを更新
         const sequenceCompleted = stretchSeqRef.current.update(position);
 
-        // メッセージ表示時のポジション名変換
-        setMessage(`次のポジション: ${getPositionName(stretchSeqRef.current.getNextPosition())}`);
+        // メッセージとタイマーの更新
+        const expectedPosition = stretchSeqRef.current.getNextPosition();
+        setNextPosition(expectedPosition);
+        setRemainingLoops(stretchSeqRef.current.getRemainingLoops());
+
+        // 現在のポジションが期待するポジションと一致する場合のみカウントダウンを表示
+        const isCorrectPosition = position === expectedPosition;
+        if (isCorrectPosition && stretchSeqRef.current.positionStartTime) {
+          const remainingTime = stretchSeqRef.current.getRemainingTime();
+          setCountdown(remainingTime);
+          setIsWaiting(true);
+          setMessage(`${getPositionName(expectedPosition)}の姿勢をキープしてください`);
+        } else {
+          setIsWaiting(false);
+          setCountdown(0);
+          setMessage(`次のポジション: ${getPositionName(expectedPosition)}`);
+        }
 
         if (sequenceCompleted) {
           setCompleted(true);
@@ -405,8 +419,17 @@ function WaistStretchModal({ onComplete }) {
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg p-1 w-[95vw] h-[95vh] flex flex-col">
-        <div className="flex justify-between items-center px-3 py-1">
-          <h2 className="text-3xl font-bold text-gray-800">腰のストレッチ</h2>
+        <div className="flex justify-between items-center px-3 py-2 border-b border-gray-200">
+          <div className="flex items-center gap-4 flex-wrap">
+            <h2 className="text-3xl font-bold text-gray-800">腰のストレッチ</h2>
+            <div className="bg-yellow-50 px-4 py-2 rounded-lg border-2 border-yellow-400">
+              <p className="text-lg font-bold text-gray-800">
+                ⚠️ 必ず
+                <span className="text-red-600 mx-1">右を向いて、左肩と左腰をカメラに向けて</span>
+                ストレッチしてください ⚠️
+              </p>
+            </div>
+          </div>
         </div>
         
         <div className="flex-1 grid grid-cols-[2fr,1.2fr] gap-1 p-1 h-full">
