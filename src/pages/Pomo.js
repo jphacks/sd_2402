@@ -12,7 +12,7 @@ import {
 import Camera from "../components/NewCamera";
 import { startNeckStretch } from "../components/StretchNeck";
 //import { set } from "firebase/database";
-//import { startWaistStretch } from "../components/StretchWaist";
+import { startWaistStretch } from "../components/StretchWaist";
 
 function Pomo() {
   const { currentUser } = useAuth();
@@ -84,7 +84,7 @@ function Pomo() {
             body: '笑顔で休憩を開始しましょう！'
           });
         }
-        //await startWaistStretch(); // 腰のストレッチを開始（追加）
+        await startWaistStretch(); // 腰のストレッチを開始（追加）
         await startNeckStretch(); // 首のストレッチを開始(変更点)
 
         setIsActive(false);
@@ -439,3 +439,7 @@ function Pomo() {
 }
 
 export default Pomo;
+
+
+
+
