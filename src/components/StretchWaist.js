@@ -300,7 +300,7 @@ function WaistStretchModal({ onComplete }) {
         let position = lastPositionRef.current || 'center';
 
         const forwardThreshold = -25;  // 前屈の閾値（角度が負に大きい）
-        const backwardThreshold = 25;  // 後屈の閾値（角度が正に大きい）
+        const backwardThreshold = 20;  // 後屈の閾値（角度が正に大きい）
         const centerThreshold = 10;     // 中心位置の許容範囲
 
         if (angle <= forwardThreshold) {
@@ -406,12 +406,17 @@ function WaistStretchModal({ onComplete }) {
 
     return () => {
       isMounted = false; // アンマウント時にフラグを更新
-      if (pose) pose.close();
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
+        animationFrameIdRef.current = null;
+      }
+      if (pose) {
+        pose.close();
+        pose = null;
+      }
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = null;
       }
     };
   }, [onComplete]);

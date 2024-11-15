@@ -418,25 +418,6 @@ function Pomo() {
           </h2>
           <Camera mode={mode} setMode={setMode} waitForWorking={waitForWorking} stdUrl={stdImageUrl} setStdUrl={setStdImageUrl} setPoseScore={setPoseScore} onSmileDetected={handleSmileDetected} />
         </div>
-        {waitForWorking && (
-          <h2>
-            今はワーク待ちだよ
-          </h2>
-        )}
-        {stdImageUrl && (
-          <h2>
-            基準を獲得できました！
-          </h2>
-        )}
-        {poseScore && (
-          <ul>
-          {Object.entries(poseScore).map(([key, value]) => (
-            <li key={key}>
-              {key}: {value}
-            </li>
-          ))}
-        </ul>
-        )}
       </div>
 
       {/* タスク設定モーダル */}
