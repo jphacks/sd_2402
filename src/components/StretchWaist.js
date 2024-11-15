@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Pose } from '@mediapipe/pose';
+import { playAudio } from '../utils/audio';
 
 // 角度計算関数の改善
 function calculateAngle(a, b) {
@@ -63,6 +64,10 @@ class StretchSequence {
           }
           this.currentStep = 0;
         }
+        playAudio(
+          '/musics/' + 
+          (this.sequence[this.currentStep] === 'forward' ? 'zenkutsu' : 'koukutsu') + '.wav'
+        );
         this.positionStartTime = null;
         this.currentPosition = null;
       }

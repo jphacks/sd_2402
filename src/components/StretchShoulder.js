@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { Pose } from '@mediapipe/pose';
+import { playAudio } from '../utils/audio';
 
 // ヘルパー関数
 
@@ -103,6 +104,10 @@ class ShoulderStretchSequence {
           }
           this.currentStep = 0;
         }
+        playAudio(
+          '/musics/' +
+          (this.sequence[this.currentStep] === 'right_stretch' ? 'right.wav' : 'left.wav')
+        );
         this.positionStartTime = null;
       }
     } else {

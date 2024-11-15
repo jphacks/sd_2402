@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { FaceMesh } from '@mediapipe/face_mesh';
+import { playAudio } from '../utils/audio';
 
 // 顔のヨー角を計算する関数
 function calculateHeadYaw(landmarks, imageWidth, imageHeight) {
@@ -76,6 +77,10 @@ class StretchSequence {
           }
           this.currentStep = 0;
         }
+        playAudio(
+          '/musics/' + 
+          (this.sequence[this.currentStep] === 'left' ? 'left.wav' : 'right.wav')
+        );
         this.positionStartTime = currentTime;
       }
     }
