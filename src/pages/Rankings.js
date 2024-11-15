@@ -88,7 +88,7 @@ export function Rankings() {
               {type === 'pomodoro' ? (
                 <div className="text-sm text-gray-600">
                   <p>総ポモドーロ: {data.count}回</p>
-                  <p>総作業時間: {data.totalDuration}分</p>
+                  <p>総作業時間: {Math.round(data.totalDuration)}分</p>
                 </div>
               ) : (
                 <div className="text-sm text-gray-600">
