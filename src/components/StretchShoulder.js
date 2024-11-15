@@ -31,7 +31,7 @@ function calculateAngle(point1, point2) {
 function isStretchingShoulder(landmarks, side = 'right') {
   if (!landmarks) return false;
 
-  const { shoulder, elbow, wrist } = getBodyPoints(landmarks, side);
+  const { shoulder: shoulder, wrist: wrist } = getBodyPoints(landmarks, side);
   const oppositeSide = side === 'right' ? 'left' : 'right';
   const { elbow: oppositeElbow, wrist: oppositeWrist } = getBodyPoints(landmarks, oppositeSide);
 
@@ -41,17 +41,17 @@ function isStretchingShoulder(landmarks, side = 'right') {
   }
 
   // 反対側の手首と肘の角度を計算
-  if ((90.0 - calculateAngle(oppositeWrist, oppositeElbow)) > 30.0) {
+  if ((90.0 - calculateAngle(oppositeWrist, oppositeElbow)) > 45.0) {
     return false;
   }
 
   // 手首、肘、肩のx座標の順序を確認
   if (side === 'left') {
-    if (!(wrist.x < elbow.x && elbow.x < shoulder.x)) {
+    if (!(wrist.x < shoulder.x) || !(oppositeElbow.y > oppositeWrist.y)) {
       return false;
     }
   } else if (side === 'right') {
-    if (!(wrist.x > elbow.x && elbow.x > shoulder.x)) {
+    if (!(wrist.x > shoulder.x) || !(oppositeElbow.y > oppositeWrist.y)) {
       return false;
     }
   }
