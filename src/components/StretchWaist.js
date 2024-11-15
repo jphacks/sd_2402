@@ -114,13 +114,10 @@ const getPositionName = (pos) => {
   }
 };
 
-// SequenceDisplayコンポーネントの修正
+// SequenceDisplayコンポーネントから警告を削除
 function SequenceDisplay({ sequence, currentStep, remainingLoops }) {
   return (
     <div className="w-full h-1/3 px-4 py-2 bg-gray-100 rounded-lg flex flex-col">
-      <div className="flex justify-between items-center mb-2">
-        <p className="text-lg text-gray-700">立ち上がって右を向き、腰をストレッチしてください。</p>
-      </div>
       <div className="flex-1 flex flex-col">
         <h3 className="text-lg font-semibold text-blue-600 mb-2">シーケンス</h3>
         <div className="flex items-center justify-center mb-2">
@@ -422,8 +419,17 @@ function WaistStretchModal({ onComplete }) {
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-lg p-1 w-[95vw] h-[95vh] flex flex-col">
-        <div className="flex justify-between items-center px-3 py-1">
-          <h2 className="text-3xl font-bold text-gray-800">腰のストレッチ</h2>
+        <div className="flex justify-between items-center px-3 py-2 border-b border-gray-200">
+          <div className="flex items-center gap-4 flex-wrap">
+            <h2 className="text-3xl font-bold text-gray-800">腰のストレッチ</h2>
+            <div className="bg-yellow-50 px-4 py-2 rounded-lg border-2 border-yellow-400">
+              <p className="text-lg font-bold text-gray-800">
+                ⚠️ 必ず
+                <span className="text-red-600 mx-1">右を向いて、左肩と左腰をカメラに向けて</span>
+                ストレッチしてください ⚠️
+              </p>
+            </div>
+          </div>
         </div>
         
         <div className="flex-1 grid grid-cols-[2fr,1.2fr] gap-1 p-1 h-full">
