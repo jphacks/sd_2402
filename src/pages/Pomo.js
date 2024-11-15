@@ -11,21 +11,30 @@ import {
 } from "firebase/firestore";
 import Camera from "../components/NewCamera";
 import { startNeckStretch } from "../components/StretchNeck";
-import { updateProfile } from "firebase/auth";
 //import { set } from "firebase/database";
 //import { startWaistStretch } from "../components/StretchWaist";
 
 function Pomo() {
   const { currentUser } = useAuth();
-  const [minutes, setMinutes] = useState(0);
-  const [seconds, setSeconds] = useState(25);
+  // 時間設定
+  const [timerSettings, setTimerSettings] = useState({
+    workMinutes: 25,
+    workSeconds: 0,
+    breakMinutes: 5,
+    breakSeconds: 0,
+    longBreakMinutes: 15,
+    longBreakSeconds: 0
+  });
+  const [minutes, setMinutes] = useState(timerSettings.workMinutes);
+  const [seconds, setSeconds] = useState(timerSettings.workSeconds);
   const [isActive, setIsActive] = useState(false);
-  const [mode, setMode] = useState('work');
+  const [mode, setMode] = useState('waitForWorking');
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [taskName, setTaskName] = useState('');
   const [showTaskModal, setShowTaskModal] = useState(true);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [waitingForSmile, setWaitingForSmile] = useState(false);
@@ -38,6 +47,49 @@ function Pomo() {
   const [stdImageUrl, setStdImageUrl] = useState(null);
   const [waitForWorking, setWaitingForWorking] = useState(true);
   const [sessionCount, setSessionCount] = useState(1);
+
+  // デバッグ用のログを追加
+  const playNotificationSound = useCallback((mode) => {
+    try {
+      const soundUrl = mode === 'work' 
+        ? '/sounds/level-up-47165.mp3' 
+        : '/sounds/break-end.mp3';
+      console.log('Loading sound from:', soundUrl); // URLを確認
+      
+      const audio = new Audio(soundUrl);
+      audio.volume = 0.5;
+      
+      // 読み込みの状態を確認
+      audio.addEventListener('loadstart', () => console.log('Loading started'));
+      audio.addEventListener('loadeddata', () => console.log('Data loaded'));
+      audio.addEventListener('error', (e) => console.log('Loading error:', e));
+      
+      audio.play()
+        .catch(error => {
+          console.error('Play failed:', error);
+        });
+    } catch (error) {
+      console.error('Init failed:', error);
+    }
+  }, []);
+
+  const sendNotification = useCallback((title, options, mode) => {
+    // モードに応じた通知音を再生
+    playNotificationSound(mode);
+  
+    // ウィンドウがフォーカスされていない場合は通知も送る
+    if (!window.document.hasFocus() && Notification.permission === 'granted') {
+      try {
+        const notification = new Notification(title, options);
+        notification.onclick = function() {
+          window.focus();
+          notification.close();
+        };
+      } catch (error) {
+        console.error('Error sending notification:', error);
+      }
+    }
+  }, [playNotificationSound]);
 
   // カテゴリーの取得
   const fetchCategories = useCallback(async () => {
@@ -70,20 +122,20 @@ function Pomo() {
           categoryId: selectedCategory,
           categoryName: categories.find(c => c.id === selectedCategory)?.name,
           taskName: taskName,
-          duration: 0.5,
+          duration: minutes + seconds / 60,
           mode: mode,
           completed: true,
           poseScore: poseScore,
         };
         
         await addDoc(pomodoroRef, pomodoroData);
-        console.log("Work session completed and saved");
+        console.log(`Work session completed and saved: 猫背=${poseScore.catSpine}`);
 
 
         if (Notification.permission === 'granted') {
-          new Notification('作業完了！', {
+          sendNotification('作業完了！', {
             body: '笑顔で休憩を開始しましょう！'
-          });
+          }, 'work'); //modeを追加
         }
         //await startWaistStretch(); // 腰のストレッチを開始（追加）
         await startNeckStretch(); // 首のストレッチを開始(変更点)
@@ -97,9 +149,9 @@ function Pomo() {
         if (Notification.permission === 'granted') {
           const newSessionCount = sessionCount + 1;
           setSessionCount(newSessionCount);
-          new Notification('休憩終了！', {
+          sendNotification('休憩終了！', {
             body: '次のタスクを開始しましょう。'
-          });
+          }, 'break');
         }
         setWaitingForWorking(true);
         setPoseScore({
@@ -108,8 +160,8 @@ function Pomo() {
           shallowSitting: 0,
           distorting: 0
         });
-        setMinutes(0);
-        setSeconds(30);
+        setMinutes(timerSettings.workMinutes);
+        setSeconds(timerSettings.workSeconds);
         setMode('waitForWorking');
         setIsActive(false);
       }
@@ -118,7 +170,7 @@ function Pomo() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser.uid, selectedCategory, categories, taskName, mode]);
+  }, [currentUser.uid, selectedCategory, categories, taskName, mode, timerSettings.workMinutes, timerSettings.workSeconds]);
 
   // カテゴリーの追加
   const handleAddCategory = useCallback(async () => {
@@ -172,24 +224,24 @@ function Pomo() {
       distorting: 0,
       shallowSitting: 0
     });
-    setMinutes(0);
-    setSeconds(25);
+    setMinutes(timerSettings.workMinutes);
+    setSeconds(timerSettings.workSeconds);
     setWaitingForSmile(false);
     setSessionCount(1);
     console.log("Timer reset");
-  }, []);
+  }, [timerSettings.workMinutes, timerSettings.workSeconds]);
 
   // 笑顔検出時の処理
   const handleSmileDetected = useCallback(() => {
     if (waitingForSmile) {
       //休憩開始時
       if (sessionCount == 4) {
-        setMinutes(0);
-        setSeconds(30);
+        setMinutes(timerSettings.longBreakMinutes);
+        setSeconds(timerSettings.longBreakSeconds);
         setSessionCount(0);
       } else {
-        setMinutes(0);
-        setSeconds(15);
+        setMinutes(timerSettings.breakMinutes);
+        setSeconds(timerSettings.breakSeconds);
       }
       setMode('break');
       setIsActive(true);
@@ -199,7 +251,7 @@ function Pomo() {
       console.log("Starting timer due to smile detection");
       startTimer();
     }
-  }, [isActive, taskName, selectedCategory, startTimer, waitingForSmile, sessionCount]);
+  }, [isActive, taskName, selectedCategory, startTimer, waitingForSmile, sessionCount, timerSettings.breakMinutes, timerSettings.breakSeconds, timerSettings.longBreakMinutes, timerSettings.longBreakSeconds]);
 
   // カテゴリーの初期読み込み
   useEffect(() => {
@@ -277,6 +329,15 @@ function Pomo() {
                 className="border border-red-600 text-red-600 px-6 py-2 rounded-md hover:bg-red-50 transition-colors duration-200"
               >
                 リセット
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="text-gray-600 hover:text-gray-800 text-sm"
+              >
+                ⚙️ タイマー設定
               </button>
             </div>
 
@@ -435,6 +496,155 @@ function Pomo() {
           </div>
         </div>
       )}
+
+      {/* タイマー設定モーダル（新規追加） */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full relative">
+            <h3 className="text-lg font-medium mb-4">タイマー設定</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  作業時間（分）
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  value={timerSettings.workMinutes}
+                  onChange={(e) => setTimerSettings(prev => ({
+                    ...prev,
+                    workMinutes: parseInt(e.target.value) || 0
+                  }))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
+
+              {/* 作業時間の秒設定 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  作業時間（秒）
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={timerSettings.workSeconds}
+                  onChange={(e) => setTimerSettings(prev => ({
+                    ...prev,
+                    workSeconds: parseInt(e.target.value) || 0
+                  }))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  休憩時間（分）
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="30"
+                  value={timerSettings.breakMinutes}
+                  onChange={(e) => setTimerSettings(prev => ({
+                    ...prev,
+                    breakMinutes: parseInt(e.target.value) || 0
+                  }))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
+
+              {/* 休憩時間の秒設定 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  休憩時間（秒）
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={timerSettings.breakSeconds}
+                  onChange={(e) => setTimerSettings(prev => ({
+                    ...prev,
+                    breakSeconds: parseInt(e.target.value) || 0
+                  }))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  長い休憩時間（分）
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  value={timerSettings.longBreakMinutes}
+                  onChange={(e) => setTimerSettings(prev => ({
+                    ...prev,
+                    longBreakMinutes: parseInt(e.target.value) || 0
+                  }))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
+
+              {/* 長い休憩時間の秒設定 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  長い休憩時間（秒）
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={timerSettings.longBreakSeconds}
+                  onChange={(e) => setTimerSettings(prev => ({
+                    ...prev,
+                    longBreakSeconds: parseInt(e.target.value) || 0
+                  }))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={() => {
+                    // 分と秒が両方0の場合は保存しない
+                    if (timerSettings.workMinutes === 0 && timerSettings.workSeconds === 0) {
+                      alert('作業時間は0分0秒には設定できません');
+                      return;
+                    }
+                    if (timerSettings.breakMinutes === 0 && timerSettings.breakSeconds === 0) {
+                      alert('休憩時間は0分0秒には設定できません');
+                      return;
+                    }
+                    if (timerSettings.longBreakMinutes === 0 && timerSettings.longBreakSeconds === 0) {
+                      alert('長い休憩時間は0分0秒には設定できません');
+                      return;
+                    }
+                    
+                    setMinutes(timerSettings.workMinutes);
+                    setSeconds(timerSettings.workSeconds);
+                    setShowSettingsModal(false);
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-200"
+                >
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 }

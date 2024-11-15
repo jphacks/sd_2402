@@ -298,15 +298,21 @@ export function useFriends() {
         stats.byCategory[pomo.categoryName]++;
       }
 
-      stats.avgPoseScores.good += pomo.good || 0;
-      stats.avgPoseScores.catSpine += pomo.catSpine || 0;
-      stats.avgPoseScores.shallowSitting += pomo.shallowSitting || 0;
-      stats.avgPoseScores.distorting += pomo.distorting || 0;
+      stats.avgPoseScores.good += pomo.poseScore.good || 0;
+      stats.avgPoseScores.catSpine += pomo.poseScore.catSpine || 0;
+      stats.avgPoseScores.shallowSitting += pomo.poseScore.shallowSitting || 0;
+      stats.avgPoseScores.distorting += pomo.poseScore.distorting || 0;
     });
 
-    Object.keys(stats.avgPoseScores).forEach(key => {
-      stats.avgPoseScores[key] = +(stats.avgPoseScores[key] / pomodoros.length).toFixed(2);
-    });
+    // 各時点でのposeScore合計を計算
+    const totalPoseScore = Object.values(stats.avgPoseScores).reduce((sum, value) => sum + value, 0);
+
+    // 割合の計算（パーセント表示）
+    if (totalPoseScore > 0) {
+      Object.keys(stats.avgPoseScores).forEach(key => {
+        stats.avgPoseScores[key] = +((stats.avgPoseScores[key] / totalPoseScore) * 100).toFixed(2);
+      });
+    }
 
     return stats;
   }, []);

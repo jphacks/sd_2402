@@ -23,7 +23,7 @@ export function FriendsManagement() {
   const [friendRequests, setFriendRequests] = useState([]);
   const [friends, setFriends] = useState([]);
   const [selectedFriend, setSelectedFriend] = useState(null);
-  const [selectedPeriod, setSelectedPeriod] = useState('today');
+  const [selectedPeriod, setSelectedPeriod] = useState('week');
   const [friendPomodoros, setFriendPomodoros] = useState({ today: [], week: [] });
   const [pomodoroStats, setPomodoroStats] = useState({ today: null, week: null });
   const [message, setMessage] = useState('');

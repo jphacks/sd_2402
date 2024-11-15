@@ -110,10 +110,10 @@ export function useRankings() {
               const pomo = doc.data();
               stats.count++;
               stats.totalDuration += pomo.duration || 0;
-              stats.goodPosture += pomo.good || 0;
-              stats.catSpine += pomo.catSpine || 0;
-              stats.shallowSitting += pomo.shallowSitting || 0;
-              stats.distorting += pomo.distorting || 0;
+              stats.goodPosture += pomo.poseScore.good || 0;
+              stats.catSpine += pomo.poseScore.catSpine || 0;
+              stats.shallowSitting += pomo.poseScore.shallowSitting || 0;
+              stats.distorting += pomo.poseScore.distorting || 0;
             });
 
             if (stats.count > 0) {
@@ -179,24 +179,40 @@ export function useRankings() {
               userId: user.id,
               username: user.displayName,
               count: 0,
+              totalDuration: 0,
               goodPosture: 0,
-              totalDuration: 0
+              catSpine: 0,
+              shallowSitting: 0,
+              distorting: 0
             };
 
             pomodoros.forEach(doc => {
               const pomo = doc.data();
               stats.count++;
-              stats.goodPosture += pomo.good || 0;
               stats.totalDuration += pomo.duration || 0;
+              stats.goodPosture += pomo.poseScore.good || 0;
+              stats.catSpine += pomo.poseScore.catSpine || 0;
+              stats.shallowSitting += pomo.poseScore.shallowSitting || 0;
+              stats.distorting += pomo.poseScore.distorting || 0;
             });
 
             if (stats.count > 0) {
-              stats.goodPosture = +(stats.goodPosture / stats.count).toFixed(2);
+              // 姿勢スコアの合計を計算
+              const totalPoseScore = stats.goodPosture + stats.catSpine + 
+                                   stats.shallowSitting + stats.distorting;
+              
+              // 各姿勢スコアを割合（パーセント）に変換
+              if (totalPoseScore > 0) {
+                stats.goodPosture = +((stats.goodPosture / totalPoseScore) * 100).toFixed(2);
+                stats.catSpine = +((stats.catSpine / totalPoseScore) * 100).toFixed(2);
+                stats.shallowSitting = +((stats.shallowSitting / totalPoseScore) * 100).toFixed(2);
+                stats.distorting = +((stats.distorting / totalPoseScore) * 100).toFixed(2);
+              }
             }
 
             return stats;
           } catch (error) {
-            console.error(`Error fetching posture data for user ${user.displayName}:`, error);
+            console.error(`Error fetching pomodoros for user ${user.displayName}:`, error);
             return null;
           }
         })

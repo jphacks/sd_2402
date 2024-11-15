@@ -8,62 +8,31 @@ function Camera({ mode, setMode, waitForWorking, stdUrl, setStdUrl, setPoseScore
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isSmiling, setIsSmiling] = useState(false);
   const [stdFeatures, setStdFeatures] = useState(null);
-  const [isHolisticReady, setIsHolisticReady] = useState(false);
-  
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
   const holisticRef = useRef(null);
-  const isProcessingRef = useRef(false);
-  const isMountedRef = useRef(true);
-  const captureIntervalRef = useRef(null);
-  const isDeletedRef = useRef(false);
-  const smileDetectionIntervalRef = useRef(null);
-  
-  const DEBUG = true;
+  const poseScoreRef = useRef({
+    good: 0,
+    catSpine: 0,
+    shallowSitting: 0,
+    distorting: 0
+  });
 
-  const SHOULDER_THRESHOLD = 0.02;
-  const FACEAREA_THRESHOLD = 1.05;
+  const SHOULDER_THRESHOLD_CAT = 0.04;
+  const SHOULDER_THRESHOLD_SHALLOW = 0.06;
+  const FACEAREA_THRESHOLD_CAT = 1.09;
+  const FACEAREA_THRESHOLD_SHALLOW = 1.13;
   const DISTORTION_THRESHOLD = 0.05;
-  const CAPTURE_INTERVAL = 5000; // 5秒間隔
+
 
   // Helper functions
   const distance = (x1, y1, x2, y2) => {
     return Math.sqrt(Math.pow((x2 - x1), 2) + Math.pow((y2 - y1), 2));
   };
 
-  const isVideoReady = useCallback(() => {
-    const video = webcamRef.current?.video;
-    return (
-      video &&
-      video.readyState === 4 &&
-      video.videoWidth > 0 &&
-      video.videoHeight > 0 &&
-      !video.paused &&
-      !video.ended
-    );
-  }, []);
-
-  const cleanupHolistic = useCallback(() => {
-    if (holisticRef.current && !isDeletedRef.current) {
-      try {
-        isDeletedRef.current = true;
-        holisticRef.current.close();
-        holisticRef.current = null;
-      } catch (error) {
-        console.log('Cleanup error (safe to ignore):', error);
-      }
-    }
-  }, []);
-
   const getImportantFeatures = useCallback((results) => {
     if (!results.poseLandmarks || !results.faceLandmarks) {
-      if (DEBUG) {
-        console.log('Missing landmarks:', {
-          hasPose: !!results.poseLandmarks,
-          hasFace: !!results.faceLandmarks
-        });
-      }
-      return null;
+      return stdFeatures;
     }
 
     const landmarks = results.poseLandmarks;
@@ -81,75 +50,12 @@ function Camera({ mode, setMode, waitForWorking, stdUrl, setStdUrl, setPoseScore
     const width = distance(left.x, left.y, right.x, right.y);
     const faceArea = height * width;
 
-    if (DEBUG) {
-      console.log('Extracted features:', {
-        faceArea,
-        leftShoulderY: leftShoulder.y,
-        rightShoulderY: rightShoulder.y
-      });
-    }
-
     return {
       left_shoulder: leftShoulder,
       right_shoulder: rightShoulder,
       face_area: faceArea,
     };
-  }, []);
-
-  const isBiggerFace = useCallback((curr) => {
-    if (!stdFeatures || !curr) return false;
-    return curr.face_area / stdFeatures.face_area > FACEAREA_THRESHOLD;
   }, [stdFeatures]);
-
-  const isSmallerFace = useCallback((curr) => {
-    if (!stdFeatures || !curr) return false;
-    return stdFeatures.face_area / curr.face_area > FACEAREA_THRESHOLD;
-  }, [stdFeatures]);
-
-  const isLowerShoulders = useCallback((curr) => {
-    if (!stdFeatures || !curr) return false;
-    const currentShouldersHeight = (curr.left_shoulder.y + curr.right_shoulder.y) / 2;
-    const stdShouldersHeight = (stdFeatures.left_shoulder.y + stdFeatures.right_shoulder.y) / 2;
-    return stdShouldersHeight - currentShouldersHeight > SHOULDER_THRESHOLD;
-  }, [stdFeatures]);
-
-  const isCatSpine = useCallback((curr) => {
-    return isBiggerFace(curr) && isLowerShoulders(curr);
-  }, [isBiggerFace, isLowerShoulders]);
-
-  const isShallowSitting = useCallback((curr) => {
-    return isSmallerFace(curr) && isLowerShoulders(curr);
-  }, [isSmallerFace, isLowerShoulders]);
-
-  const isDistorting = useCallback((curr) => {
-    if (!stdFeatures || !curr) return false;
-    return Math.abs(curr.left_shoulder.y - curr.right_shoulder.y) > DISTORTION_THRESHOLD;
-  }, [stdFeatures]);
-
-  const calculatePoseScores = useCallback((currentFeatures) => {
-    const scores = {
-      good: 0,
-      catSpine: 0,
-      shallowSitting: 0,
-      distorting: 0
-    };
-
-    if (isCatSpine(currentFeatures)) {
-      scores.catSpine = 1;
-      if (DEBUG) console.log('Cat spine detected');
-    } else if (isShallowSitting(currentFeatures)) {
-      scores.shallowSitting = 1;
-      if (DEBUG) console.log('Shallow sitting detected');
-    } else if (isDistorting(currentFeatures)) {
-      scores.distorting = 1;
-      if (DEBUG) console.log('Distortion detected');
-    } else {
-      scores.good = 1;
-      if (DEBUG) console.log('Good posture detected');
-    }
-
-    return scores;
-  }, [isCatSpine, isShallowSitting, isDistorting]);
 
   // Face detection model loading
   useEffect(() => {
@@ -170,274 +76,178 @@ function Camera({ mode, setMode, waitForWorking, stdUrl, setStdUrl, setPoseScore
 
   // Smile detection
   const detectExpressions = useCallback(async () => {
-    if (!isMountedRef.current) return;
-    if (!webcamRef.current?.video || webcamRef.current.video.readyState !== 4) return;
-
-    try {
+    if (webcamRef.current && webcamRef.current.video && webcamRef.current.video.readyState === 4) {
       const video = webcamRef.current.video;
-      const detections = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-        .withFaceExpressions();
+      try {
+        const detections = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceExpressions();
 
-      if (!isMountedRef.current) return;
+        if (detections) {
+          const smile = detections.expressions.happy;
+          const wasSmiling = isSmiling;
 
-      if (detections) {
-        const smile = detections.expressions.happy;
-        const wasSmiling = isSmiling;
+          if (smile > 0.7) {
+            if (waitForWorking && !stdUrl) {
+              const imgSrc = webcamRef.current?.getScreenshot();
+              setStdUrl(imgSrc);
+            }
+            if  (mode == 'waitForWorking') {
+              setMode('work');
+            }
+            setIsSmiling(true);
 
-        if (smile > 0.7) {
-          if (waitForWorking && !stdUrl) {
-            const imgSrc = webcamRef.current?.getScreenshot();
-            setStdUrl(imgSrc);
+            if (!wasSmiling && onSmileDetected) {
+              console.log("Smile detected, confidence:", smile);
+              onSmileDetected();
+            }
+          } else {
+            setIsSmiling(false);
           }
-          if (mode === 'waitForWorking') {
-            setMode('work');
-          }
-          setIsSmiling(true);
-
-          if (!wasSmiling && onSmileDetected) {
-            console.log("Smile detected, confidence:", smile);
-            onSmileDetected();
-          }
-        } else {
-          setIsSmiling(false);
         }
-      }
-    } catch (error) {
-      if (isMountedRef.current) {
+      } catch (error) {
         console.error("Error during expression detection:", error);
       }
     }
-  }, [isSmiling, onSmileDetected, waitForWorking, stdUrl, setStdUrl, mode, setMode]);
+  }, [isSmiling, onSmileDetected, waitForWorking, stdUrl, setStdUrl]);
 
-  // Holistic setup
-  useEffect(() => {
-    let holistic = null;
+  // Posture analysis functions
+  const isBiggerFace = useCallback((curr, threshold) => {
+    if (!stdFeatures || !curr) return false;
+    return curr.face_area / stdFeatures.face_area > threshold;
+  }, [stdFeatures]);
 
-    const initializeHolistic = async () => {
-      if (!isEnabled || !isMountedRef.current || isDeletedRef.current) return;
+  const isSmallerFace = useCallback((curr, threshold) => {
+    if (!stdFeatures || !curr) return false;
+    return stdFeatures.face_area / curr.face_area > threshold;
+  }, [stdFeatures]);
 
-      try {
-        if (holisticRef.current && !isDeletedRef.current) {
-          console.log('Reusing existing Holistic instance');
-          return;
-        }
+  const isLowerShoulders = useCallback((curr, threshold) => {
+    if (!stdFeatures || !curr) return false;
+    const currentShouldersHeight = (curr.left_shoulder.y + curr.right_shoulder.y) / 2;
+    const stdShouldersHeight = (stdFeatures.left_shoulder.y + stdFeatures.right_shoulder.y) / 2;
+    return currentShouldersHeight - stdShouldersHeight > threshold;
+  }, [stdFeatures]);
 
-        isDeletedRef.current = false;
+  const isCatSpine = useCallback((curr, face_threshold, shoulder_threshold) => {
+    return isBiggerFace(curr, face_threshold) && isLowerShoulders(curr, shoulder_threshold);
+  }, [isBiggerFace, isLowerShoulders]);
 
-        holistic = new Holistic({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
-        });
+  const isShallowSitting = useCallback((curr, face_threshold, shoulder_threshold) => {
+    return isSmallerFace(curr, face_threshold) && isLowerShoulders(curr, shoulder_threshold);
+  }, [isSmallerFace, isLowerShoulders]);
 
-        holistic.onResults((results) => {
-          if (!isMountedRef.current || !holistic || isDeletedRef.current) return;
-          
-          if (DEBUG) {
-            console.log('Holistic results received:', {
-              timestamp: new Date().toISOString(),
-              hasResults: !!results
-            });
-          }
-
-          const features = getImportantFeatures(results);
-          
-          if (!features) return;
-
-          if (!stdFeatures) {
-            console.log('Setting standard features');
-            setStdFeatures(features);
-          } else if (mode === 'work') {
-            const scores = calculatePoseScores(features);
-            setPoseScore(prev => ({
-              good: (prev?.good || 0) + scores.good,
-              catSpine: (prev?.catSpine || 0) + scores.catSpine,
-              shallowSitting: (prev?.shallowSitting || 0) + scores.shallowSitting,
-              distorting: (prev?.distorting || 0) + scores.distorting
-            }));
-          }
-        });
-
-        await holistic.initialize();
-
-        if (isMountedRef.current) {
-          holistic.setOptions({
-            upperBodyOnly: true,
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.7
-          });
-          
-          holisticRef.current = holistic;
-          setIsHolisticReady(true);
-          console.log('Holistic setup completed');
-        } else {
-          holistic.close();
-        }
-      } catch (error) {
-        console.error('Error initializing Holistic:', error);
-        if (holistic) {
-          holistic.close();
-        }
-        setIsHolisticReady(false);
-      }
-    };
-
-    if (isEnabled) {
-      initializeHolistic();
-    }
-
-    return () => {
-      if (isDeletedRef.current || !isEnabled) {
-        cleanupHolistic();
-        setIsHolisticReady(false);
-      }
-    };
-  }, [isEnabled, cleanupHolistic, getImportantFeatures, calculatePoseScores, mode, stdFeatures, setPoseScore]);
+  const isDistorting = useCallback((curr) => {
+    if (!stdFeatures || !curr) return false;
+    return Math.abs(curr.left_shoulder.y - curr.right_shoulder.y) > DISTORTION_THRESHOLD;
+  }, [stdFeatures]);
 
   // Capture posture
   const capturePosture = useCallback(async () => {
-    if (
-      isProcessingRef.current || 
-      !holisticRef.current || 
-      !webcamRef.current?.video ||
-      isDeletedRef.current ||
-      !isHolisticReady
-    ) {
-      if (DEBUG) {
-        console.log('Capture skipped:', {
-          isProcessing: isProcessingRef.current,
-          hasHolistic: !!holisticRef.current,
-          hasVideo: !!webcamRef.current?.video,
-          isDeleted: isDeletedRef.current,
-          isHolisticReady
-        });
-      }
-      return;
-    }
-
-    try {
-      isProcessingRef.current = true;
+    if (webcamRef.current && webcamRef.current.video && holisticRef.current) {
       const video = webcamRef.current.video;
-
-      if (!video.videoWidth || !video.videoHeight || video.readyState !== 4) {
-        console.log('Video not ready for capture');
-        return;
-      }
-
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0);
-
-      if (holisticRef.current && isMountedRef.current && !isDeletedRef.current) {
-        if (DEBUG) console.log('Sending image to Holistic');
-        await holisticRef.current.send({ image: canvas });
-      }
-    } catch (error) {
-      console.error('Error capturing posture:', error);
-    } finally {
-      isProcessingRef.current = false;
+      const imageData = canvas.toDataURL('image/jpeg');
+      
+      const img = new Image();
+      img.src = imageData;
+      img.onload = () => {
+        if (holisticRef.current) {
+          holisticRef.current.send({ image: img });
+        }
+      };
     }
-  }, [isHolisticReady]);
+  }, []);
+
+  // Holistic setup and run
+  useEffect(() => {
+    if (mode === 'work' && isEnabled) {
+      console.log(`Setting up holistic model`);
+      holisticRef.current = new Holistic({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
+      });
+
+      holisticRef.current.setOptions({
+        upperBodyOnly: false,
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      holisticRef.current.onResults((results) => {
+        if (!results.poseLandmarks || !results.faceLandmarks) return;
+        
+        if (!stdFeatures) {
+          setStdFeatures(getImportantFeatures(results));
+        } else {
+          const currentFeatures = getImportantFeatures(results);
+          if (mode === 'work') {
+            if (isCatSpine(currentFeatures, FACEAREA_THRESHOLD_CAT, SHOULDER_THRESHOLD_CAT)) {
+              poseScoreRef.current.catSpine += 1;
+            } else if (isShallowSitting(currentFeatures, FACEAREA_THRESHOLD_SHALLOW, SHOULDER_THRESHOLD_SHALLOW)) {
+              poseScoreRef.current.shallowSitting += 1;
+            } else if (isDistorting(currentFeatures)) {
+              poseScoreRef.current.distorting += 1;
+            } else {
+              poseScoreRef.current.good += 1;
+            }
+            setPoseScore({...poseScoreRef.current});
+          }
+        }
+      });
+
+      // 1秒ごとに姿勢をキャプチャ
+      const interval = setInterval(capturePosture, 1000);
+
+      return () => {
+        if (holisticRef.current) {
+          holisticRef.current.close();
+        }
+        clearInterval(interval);
+      };
+    }
+  }, [mode, isEnabled, stdFeatures, getImportantFeatures, isCatSpine, isShallowSitting, isDistorting, setPoseScore, capturePosture]);
+
+  // コンポーネントがアンマウントされる前に最終的なスコアを親に通知
+  useEffect(() => {
+    return () => {
+      setPoseScore({...poseScoreRef.current});
+    };
+  }, [setPoseScore]);
+
+  // モードが変更されたときにスコアをリセット
+  useEffect(() => {
+    if (mode === 'waitForWorking') {
+      poseScoreRef.current = {
+        good: 0,
+        catSpine: 0,
+        shallowSitting: 0,
+        distorting: 0
+      };
+      setPoseScore(poseScoreRef.current);
+    }
+  }, [mode]);
 
   // Face detection interval
   useEffect(() => {
-    let isActive = true;
-
-    const startDetection = async () => {
-      if (!isEnabled || !isModelLoaded || !isActive || !isMountedRef.current) return;
-
-      await detectExpressions();
-
-      if (isActive && isMountedRef.current) {
-        smileDetectionIntervalRef.current = setTimeout(startDetection, 1000);
-      }
-    };
+    let detectInterval;
 
     if (isEnabled && isModelLoaded) {
-      startDetection();
+      console.log("Starting expression detection interval");
+      detectInterval = setInterval(detectExpressions, 1000);
     }
 
     return () => {
-      isActive = false;
-      if (smileDetectionIntervalRef.current) {
-        clearTimeout(smileDetectionIntervalRef.current);
-        smileDetectionIntervalRef.current = null;
+      if (detectInterval) {
+        console.log("Cleaning up expression detection interval");
+        clearInterval(detectInterval);
       }
     };
   }, [isEnabled, isModelLoaded, detectExpressions]);
-
-  // Posture capture interval - 5秒間隔に変更
-  useEffect(() => {
-    let isActive = true;
-
-    const startPoseCapture = async () => {
-      if (!isEnabled || mode !== 'work' || !isActive || !isMountedRef.current) return;
-
-      await capturePosture();
-
-      if (isActive && isMountedRef.current) {
-        captureIntervalRef.current = setTimeout(startPoseCapture, CAPTURE_INTERVAL);
-      }
-    };
-
-    if (isEnabled && mode === 'work') {
-      startPoseCapture();
-    }
-
-    return () => {
-      isActive = false;
-      if (captureIntervalRef.current) {
-        clearTimeout(captureIntervalRef.current);
-        captureIntervalRef.current = null;
-      }
-    };
-  }, [isEnabled, mode, capturePosture]);
-
-  // コンポーネントのマウント/アンマウント管理
-  useEffect(() => {
-    isMountedRef.current = true;
-    isDeletedRef.current = false;
-
-    return () => {
-      isMountedRef.current = false;
-      cleanupHolistic();
-      
-      if (smileDetectionIntervalRef.current) {
-        clearTimeout(smileDetectionIntervalRef.current);
-      }
-      if (captureIntervalRef.current) {
-        clearTimeout(captureIntervalRef.current);
-      }
-    };
-  }, [cleanupHolistic]);
-
-  const handleCameraToggle = useCallback(() => {
-    setIsEnabled(prev => {
-      if (!prev) {
-        isDeletedRef.current = false;
-        setStdFeatures(null);
-        setPoseScore({
-          good: 0,
-          catSpine: 0,
-          shallowSitting: 0,
-          distorting: 0
-        });
-      } else {
-        cleanupHolistic();
-        if (captureIntervalRef.current) {
-          clearTimeout(captureIntervalRef.current);
-          captureIntervalRef.current = null;
-        }
-        if (smileDetectionIntervalRef.current) {
-          clearTimeout(smileDetectionIntervalRef.current);
-          smileDetectionIntervalRef.current = null;
-        }
-      }
-      return !prev;
-    });
-  }, [cleanupHolistic, setPoseScore]);
 
   const videoConstraints = {
     width: 640,
@@ -445,23 +255,13 @@ function Camera({ mode, setMode, waitForWorking, stdUrl, setStdUrl, setPoseScore
     facingMode: "user"
   };
 
-  const renderDebugInfo = () => {
-    if (!DEBUG) return null;
-
-    return (
-      <div className="mt-2 text-xs text-gray-500">
-        <div>Mode: {mode}</div>
-        <div>Has Standard Features: {stdFeatures ? 'Yes' : 'No'}</div>
-        <div>Processing: {isProcessingRef.current ? 'Yes' : 'No'}</div>
-        <div>Holistic Ready: {isHolisticReady ? 'Yes' : 'No'}</div>
-        <div>Video Ready: {isVideoReady() ? 'Yes' : 'No'}</div>
-        <div>Next Capture: {captureIntervalRef.current ? 'Scheduled' : 'Not Scheduled'}</div>
-      </div>
-    );
-  };
+  const handleCameraToggle = useCallback(() => {
+    setIsEnabled(prev => !prev);
+  }, []);
 
   return (
     <div className="relative">
+      {/* カメラコントロール */}
       <div className="mb-4 flex justify-between items-center">
         <button
           onClick={handleCameraToggle}
@@ -480,36 +280,50 @@ function Camera({ mode, setMode, waitForWorking, stdUrl, setStdUrl, setPoseScore
         )}
       </div>
 
-      <div className="relative">
-        {isEnabled && (
-          <>
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              width={640}
-              height={480}
-              screenshotFormat="image/jpeg"
-              videoConstraints={videoConstraints}
-              className="rounded-lg shadow-lg w-full"
-              mirrored={true}
-              onUserMediaError={(error) => {
-                console.error("Webcam error:", error);
-              }}
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute top-0 left-0 w-full h-full"
-            />
-          </>
-        )}
-
-        {!isEnabled && (
-          <div className="bg-gray-100 rounded-lg p-8 text-center">
-            <p className="text-gray-600">
-              カメラをオンにして笑顔を検出します
-            </p>
+      {/* カメラビュー */}
+      <div className="space-y-4"> {/* コンテナに空白を追加 */}
+        {mode === 'waitForWorking' && (
+          <div className="bg-yellow-50 p-3 rounded-lg text-sm text-yellow-800">
+            <p className="font-medium">正しい姿勢で笑顔を見せてください：</p>
+            <ul className="list-disc list-inside mt-1">
+              <li>背筋を伸ばして座る</li>
+              <li>画面との適切な距離を保つ</li>
+              <li>肩の高さを均等に</li>
+            </ul>
           </div>
         )}
+        <div className="relative">
+          {isEnabled && (
+            <>
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                width={640}
+                height={480}
+                screenshotFormat="image/jpeg"
+                videoConstraints={videoConstraints}
+                className="rounded-lg shadow-lg w-full"
+                mirrored={true}
+                onUserMediaError={(error) => {
+                  console.error("Webcam error:", error);
+                }}
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute top-0 left-0 w-full h-full"
+              />
+              
+
+            </>
+          )}
+          {!isEnabled && (
+            <div className="bg-gray-100 rounded-lg p-8 text-center">
+              <p className="text-gray-600">
+                カメラをオンにして笑顔を検出します
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {isEnabled && !isModelLoaded && (
@@ -518,13 +332,8 @@ function Camera({ mode, setMode, waitForWorking, stdUrl, setStdUrl, setPoseScore
         </div>
       )}
       
-      {renderDebugInfo()}
-      
       <div className="mt-4 text-sm text-gray-500 text-center">
         笑顔を検出するとポモドーロが開始されます
-        <div className="text-xs text-gray-400">
-          姿勢検出は5秒ごとに行われます
-        </div>
       </div>
     </div>
   );
