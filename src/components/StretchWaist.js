@@ -39,25 +39,20 @@ class StretchSequence {
 
   update(position) {
     const currentTime = Date.now();
+    const expectedPosition = this.getNextPosition();
 
-    // ポジションが変わったらpositionStartTimeをリセット
-    if (position !== this.currentPosition) {
-      this.currentPosition = position;
-      this.positionStartTime = currentTime;
-    }
+    // 期待するポジションと現在のポジションが一致する場合のみ時間を計測
+    if (position === expectedPosition) {
+      if (position !== this.currentPosition || this.positionStartTime === null) {
+        this.currentPosition = position;
+        this.positionStartTime = currentTime;
+      }
 
-    if (this.positionStartTime === null) {
-      this.positionStartTime = currentTime;
-    }
+      const elapsedTime = currentTime - this.positionStartTime;
+      const requiredDuration = this.holdTimes[expectedPosition];
 
-    const requiredDuration = this.holdTimes[this.getNextPosition()];
-    const elapsedTime = currentTime - this.positionStartTime;
-
-    if (elapsedTime >= requiredDuration) {
-      const expected = this.sequence[this.currentStep];
-      console.log(`Expected position: ${expected}, Current position: ${this.currentPosition}`);
-      if (this.currentPosition === expected) {
-        console.log(`ステップ '${expected}' 完了`);
+      if (elapsedTime >= requiredDuration) {
+        console.log(`ステップ '${expectedPosition}' 完了`);
         this.currentStep += 1;
         if (this.currentStep >= this.sequence.length) {
           this.loopCount += 1;
@@ -69,7 +64,12 @@ class StretchSequence {
           this.currentStep = 0;
         }
         this.positionStartTime = null;
+        this.currentPosition = null;
       }
+    } else {
+      // ポジションが一致しない場合はタイマーをリセット
+      this.positionStartTime = null;
+      this.currentPosition = position;
     }
 
     return false;
@@ -95,7 +95,9 @@ class StretchSequence {
   }
 
   getRemainingTime() {
-    if (this.positionStartTime === null) return Math.ceil(this.getHoldTime() / 1000);
+    if (this.positionStartTime === null || this.currentPosition !== this.getNextPosition()) {
+      return Math.ceil(this.getHoldTime() / 1000);
+    }
     const elapsedTime = Date.now() - this.positionStartTime;
     const remainingTime = Math.max(0, this.getHoldTime() - elapsedTime);
     return Math.ceil(remainingTime / 1000);
@@ -329,8 +331,23 @@ function WaistStretchModal({ onComplete }) {
         // シーケンスを更新
         const sequenceCompleted = stretchSeqRef.current.update(position);
 
-        // メッセージ表示時のポジション名変換
-        setMessage(`次のポジション: ${getPositionName(stretchSeqRef.current.getNextPosition())}`);
+        // メッセージとタイマーの更新
+        const expectedPosition = stretchSeqRef.current.getNextPosition();
+        setNextPosition(expectedPosition);
+        setRemainingLoops(stretchSeqRef.current.getRemainingLoops());
+
+        // 現在のポジションが期待するポジションと一致する場合のみカウントダウンを表示
+        const isCorrectPosition = position === expectedPosition;
+        if (isCorrectPosition && stretchSeqRef.current.positionStartTime) {
+          const remainingTime = stretchSeqRef.current.getRemainingTime();
+          setCountdown(remainingTime);
+          setIsWaiting(true);
+          setMessage(`${getPositionName(expectedPosition)}の姿勢をキープしてください`);
+        } else {
+          setIsWaiting(false);
+          setCountdown(0);
+          setMessage(`次のポジション: ${getPositionName(expectedPosition)}`);
+        }
 
         if (sequenceCompleted) {
           setCompleted(true);
