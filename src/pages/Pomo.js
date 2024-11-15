@@ -49,6 +49,11 @@ function Pomo() {
   const [waitForWorking, setWaitingForWorking] = useState(true);
   const [sessionCount, setSessionCount] = useState(1);
 
+  function playAudio(file){
+    const audio = new Audio(file);
+    audio.play();
+  }
+
   // デバッグ用のログを追加
   const playNotificationSound = useCallback((mode) => {
     try {
@@ -138,8 +143,42 @@ function Pomo() {
             body: '笑顔で休憩を開始しましょう！'
           }, 'work'); //modeを追加
         }
-        await startWaistStretch(); // 腰のストレッチを開始（追加）
-        await startNeckStretch(); // 首のストレッチを開始(変更点)
+
+        const argmax = (obj) => {
+          return Object.entries(obj).reduce((max, entry) => entry[1] > max[1] ? entry : max)[0];
+        };
+
+        const worstPose = argmax(poseScore);
+
+        switch (worstPose) {
+          case 'catSpine':
+            await startNeckStretch();
+            break;
+          case 'shallowSitting':
+            await startWaistStretch();
+            break;
+          case 'distorting':
+            await startShoulderStretch();
+            break;
+          default:
+            const stretchNum = Math.floor(Math.random() * 3);
+            switch (stretchNum) {
+              case 0:
+                await startShoulderStretch();
+                break;
+              case 1:
+                await startWaistStretch();
+                break;
+              case 2:
+                await startNeckStretch();
+                break;
+              default:
+                break;
+            }
+        }
+
+        // ストレッチお疲れ様音声再生
+        playAudio("/musics/nice_stretch.wav");
 
         setIsActive(false);
         setMode('wait');
