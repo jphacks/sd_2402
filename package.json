@@ -11,6 +11,7 @@
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "axios": "^0.27.2",
     "dotenv": "^16.4.5",
     "face-api.js": "^0.22.2",
     "fast-api": "^0.4.0",
